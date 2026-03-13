@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::Parser;
 
 use crate::cli::{Cli, Command, InternalCommand};
+use crate::complete_stage::run_complete_stage;
 use crate::config::Config;
 use crate::domain::{can_run_analysis, parse_issue_ref, select_next_backlog_project_item};
 use crate::github::GhProjectClient;
@@ -265,6 +266,11 @@ fn run_internal(shell: &dyn Shell, internal: InternalCommand) -> Result<()> {
         InternalCommand::RenderLaunchAgentContext { issue } => {
             run_internal_render_launch_agent_context(shell, &issue)
         }
+        InternalCommand::CompleteStage {
+            session_uuid,
+            outcome,
+            message,
+        } => run_complete_stage(shell, &session_uuid, &outcome, &message),
     }
 }
 

@@ -28,4 +28,11 @@ pub enum InternalCommand {
     BindZellijPane { session_uuid: String },
     LaunchZellijFixture { issue: u64 },
     RenderLaunchAgentContext { issue: String },
+    CompleteStage {
+        session_uuid: String,
+        #[arg(long)]
+        outcome: String,
+        #[arg(long)]
+        message: String,
+    },
 }

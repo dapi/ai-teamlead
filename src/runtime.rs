@@ -137,6 +137,22 @@ impl RuntimeLayout {
         Ok(Some(value))
     }
 
+    pub fn update_session_status(
+        &self,
+        session_uuid: &str,
+        status: &str,
+    ) -> Result<SessionManifest> {
+        let mut manifest = self
+            .load_session_manifest(session_uuid)?
+            .ok_or_else(|| anyhow!("missing session manifest for session_uuid={session_uuid}"))?;
+        manifest.status = status.to_string();
+        manifest.updated_at = Utc::now().to_rfc3339();
+
+        let session_path = self.sessions_dir.join(session_uuid).join("session.json");
+        write_json_pretty(session_path, &manifest)?;
+        Ok(manifest)
+    }
+
     pub fn session_dir(&self, session_uuid: &str) -> PathBuf {
         self.sessions_dir.join(session_uuid)
     }
@@ -276,5 +292,45 @@ mod tests {
         assert_eq!(updated.zellij.session_id, "ai-teamlead");
         assert_eq!(updated.zellij.tab_id, "7");
         assert_eq!(updated.zellij.pane_id, "terminal_9");
+    }
+
+    #[test]
+    fn updates_session_status_to_completed() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let git_dir = repo_root.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("git dir");
+
+        let layout = RuntimeLayout::from_repo_root(&repo_root);
+        layout.ensure_exists().expect("runtime layout");
+
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir,
+            github_owner: "dapi".into(),
+            github_repo: "teamlead".into(),
+        };
+        let zellij = ZellijConfig {
+            session_name: "ai-teamlead".into(),
+            tab_name: "issue-analysis".into(),
+        };
+
+        let manifest = layout
+            .create_claim_binding(&repo, "PVT_project", &zellij, 42)
+            .expect("claim binding");
+
+        assert_eq!(manifest.status, "active");
+
+        let updated = layout
+            .update_session_status(&manifest.session_uuid, "completed")
+            .expect("status updated");
+
+        assert_eq!(updated.status, "completed");
+
+        let reloaded = layout
+            .load_session_manifest(&manifest.session_uuid)
+            .expect("reload")
+            .expect("manifest exists");
+        assert_eq!(reloaded.status, "completed");
     }
 }

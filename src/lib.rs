@@ -1,5 +1,6 @@
 pub mod app;
 pub mod cli;
+pub mod complete_stage;
 pub mod config;
 pub mod domain;
 pub mod github;
