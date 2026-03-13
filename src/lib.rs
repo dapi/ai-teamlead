@@ -6,3 +6,4 @@ pub mod github;
 pub mod repo;
 pub mod runtime;
 pub mod shell;
+pub mod zellij;

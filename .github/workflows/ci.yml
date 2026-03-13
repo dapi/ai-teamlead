@@ -25,3 +25,40 @@ jobs:
 
       - name: Cargo test
         run: cargo test
+
+  zellij-integration:
+    runs-on: ubuntu-latest
+    needs: rust
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build ai-teamlead binary
+        run: cargo build --locked
+
+      - name: Read pinned zellij-main release
+        id: zellij
+        run: |
+          read -r TAG SHA < ZELLIJ_VERSION
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Build zellij integration image
+        run: |
+          docker build \
+            -f Dockerfile.test \
+            --build-arg ZELLIJ_TAG=${{ steps.zellij.outputs.tag }} \
+            --build-arg ZELLIJ_SHA256=${{ steps.zellij.outputs.sha }} \
+            -t ai-teamlead-zellij-test .
+
+      - name: Run zellij integration tests
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/target/debug/ai-teamlead:/test/bin/ai-teamlead:ro" \
+            -v "${{ github.workspace }}/tests/integration:/test/tests:ro" \
+            ai-teamlead-zellij-test \
+            /test/tests/docker-test-runner.sh

@@ -92,6 +92,37 @@ impl RuntimeLayout {
         self.read_optional_json(self.sessions_dir.join(session_uuid).join("session.json"))
     }
 
+    pub fn update_zellij_binding(
+        &self,
+        session_uuid: &str,
+        session_id: &str,
+        tab_id: &str,
+        pane_id: &str,
+    ) -> Result<SessionManifest> {
+        let mut manifest = self
+            .load_session_manifest(session_uuid)?
+            .ok_or_else(|| anyhow!("missing session manifest for session_uuid={session_uuid}"))?;
+        manifest.updated_at = Utc::now().to_rfc3339();
+        manifest.zellij.session_id = session_id.to_string();
+        manifest.zellij.tab_id = tab_id.to_string();
+        manifest.zellij.pane_id = pane_id.to_string();
+
+        let session_path = self.sessions_dir.join(session_uuid).join("session.json");
+        write_json_pretty(session_path, &manifest)?;
+        Ok(manifest)
+    }
+
+    pub fn update_issue_flow_status(&self, issue_number: u64, flow_status: &str) -> Result<()> {
+        let mut index = self
+            .load_issue_index(issue_number)?
+            .ok_or_else(|| anyhow!("missing issue session index for issue #{issue_number}"))?;
+        index.last_known_flow_status = flow_status.to_string();
+        index.updated_at = Utc::now().to_rfc3339();
+
+        write_json_pretty(self.issues_dir.join(format!("{issue_number}.json")), &index)?;
+        Ok(())
+    }
+
     pub fn load_question_set(&self, session_uuid: &str) -> Result<Option<QuestionSet>> {
         self.read_optional_json(self.sessions_dir.join(session_uuid).join("questions.json"))
     }
@@ -138,6 +169,10 @@ impl RuntimeLayout {
         let value = serde_json::from_slice(&bytes)
             .with_context(|| format!("failed to parse {}", path.display()))?;
         Ok(Some(value))
+    }
+
+    pub fn session_dir(&self, session_uuid: &str) -> PathBuf {
+        self.sessions_dir.join(session_uuid)
     }
 }
 
@@ -418,5 +453,39 @@ mod tests {
                 ..RunSessionFacts::default()
             }
         );
+    }
+
+    #[test]
+    fn updates_zellij_binding_in_session_manifest() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let git_dir = repo_root.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("git dir");
+
+        let layout = RuntimeLayout::from_repo_root(&repo_root);
+        layout.ensure_exists().expect("runtime layout");
+
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir,
+            github_owner: "dapi".into(),
+            github_repo: "teamlead".into(),
+        };
+        let zellij = ZellijConfig {
+            session_name: "ai-teamlead".into(),
+            tab_name: "issue-analysis".into(),
+        };
+
+        let manifest = layout
+            .create_claim_binding(&repo, "PVT_project", &zellij, 42)
+            .expect("claim binding");
+
+        let updated = layout
+            .update_zellij_binding(&manifest.session_uuid, "ai-teamlead", "7", "terminal_9")
+            .expect("binding updated");
+
+        assert_eq!(updated.zellij.session_id, "ai-teamlead");
+        assert_eq!(updated.zellij.tab_id, "7");
+        assert_eq!(updated.zellij.pane_id, "terminal_9");
     }
 }

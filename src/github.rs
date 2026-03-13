@@ -296,6 +296,26 @@ mod tests {
                 .cloned()
                 .ok_or_else(|| anyhow!("missing fake response for: {key}"))
         }
+
+        fn run_with_env(
+            &self,
+            cwd: &Path,
+            _envs: &[(&str, &str)],
+            program: &str,
+            args: &[&str],
+        ) -> Result<String> {
+            self.run(cwd, program, args)
+        }
+
+        fn spawn_with_env(
+            &self,
+            cwd: &Path,
+            _envs: &[(&str, &str)],
+            program: &str,
+            args: &[&str],
+        ) -> Result<()> {
+            self.run(cwd, program, args).map(|_| ())
+        }
     }
 
     #[test]

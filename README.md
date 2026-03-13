@@ -196,3 +196,18 @@ runtime-артефактах внутри `.git/ai-teamlead/`.
 - целевое значение `runtime.max_parallel = 1`
 - если используется одна фиксированная `zellij` tab, значения больше `1` пока
   не поддерживаются корректно
+
+## Тестирование `zellij`
+
+Интеграционные тесты launcher выполняются в Docker.
+
+Правила:
+
+- pinned версия `zellij` хранится в `ZELLIJ_VERSION`
+- CI скачивает release из `dapi/zellij-main`
+- внутри контейнера бинарь сохраняется как обычный `zellij`
+- launcher-тесты гоняются headless через `script`
+
+Локальный запуск:
+
+- `mise run test-zellij`

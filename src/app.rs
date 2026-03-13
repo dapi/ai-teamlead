@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 
-use crate::cli::{Cli, Command};
+use crate::cli::{Cli, Command, InternalCommand};
 use crate::config::Config;
 use crate::domain::{
     RunSessionFacts, can_run_analysis, parse_issue_ref, select_next_backlog_project_item,
@@ -12,6 +12,7 @@ use crate::github::GhProjectClient;
 use crate::repo::RepoContext;
 use crate::runtime::{RuntimeLayout, derive_run_session_facts};
 use crate::shell::{Shell, SystemShell};
+use crate::zellij::{ZellijLauncher, capture_current_binding};
 
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
@@ -21,6 +22,7 @@ pub fn run() -> Result<()> {
         Some(Command::Daemon) | None => run_daemon(&shell),
         Some(Command::Poll) => run_poll(&shell),
         Some(Command::Run { issue }) => run_manual_run(&shell, &issue),
+        Some(Command::Internal { internal }) => run_internal(&shell, internal),
     }
 }
 
@@ -44,6 +46,7 @@ fn run_daemon(shell: &dyn Shell) -> Result<()> {
 fn run_poll(shell: &dyn Shell) -> Result<()> {
     let context = load_execution_context(shell)?;
     let github = GhProjectClient::new(shell);
+    let zellij = ZellijLauncher::new(shell);
     let snapshot =
         github.load_project_snapshot(&context.repo.repo_root, &context.config.github.project_id)?;
     let Some(issue) = select_next_backlog_project_item(
@@ -79,6 +82,32 @@ fn run_poll(shell: &dyn Shell) -> Result<()> {
         &context.config.zellij,
         issue.issue_number,
     )?;
+    let binary_path = std::env::current_exe().context("failed to resolve ai-teamlead binary")?;
+    if let Err(error) = zellij.launch_issue_analysis(
+        &context.repo.repo_root,
+        &context.runtime,
+        &context.config.zellij,
+        issue.issue_number,
+        &manifest.session_uuid,
+        &binary_path,
+    ) {
+        if let Ok(blocked_option_id) = snapshot
+            .option_id_by_name(&context.config.issue_analysis_flow.statuses.analysis_blocked)
+        {
+            let _ = github.update_status(
+                &context.repo.repo_root,
+                &context.config.github.project_id,
+                &issue.item_id,
+                &snapshot.status_field_id,
+                blocked_option_id,
+            );
+            let _ = context.runtime.update_issue_flow_status(
+                issue.issue_number,
+                &context.config.issue_analysis_flow.statuses.analysis_blocked,
+            );
+        }
+        return Err(error).context("failed to launch zellij issue-analysis session");
+    }
 
     println!(
         "poll: claimed issue #{} -> {} session_uuid={}",
@@ -96,6 +125,7 @@ fn run_poll(shell: &dyn Shell) -> Result<()> {
 fn run_manual_run(shell: &dyn Shell, issue_ref: &str) -> Result<()> {
     let context = load_execution_context(shell)?;
     let github = GhProjectClient::new(shell);
+    let zellij = ZellijLauncher::new(shell);
     let snapshot =
         github.load_project_snapshot(&context.repo.repo_root, &context.config.github.project_id)?;
     let issue_number = parse_issue_ref(issue_ref)
@@ -146,7 +176,124 @@ fn run_manual_run(shell: &dyn Shell, issue_ref: &str) -> Result<()> {
         bail!("run denied for issue #{issue_number}: {}", allowed.reason);
     }
 
-    println!("run: issue=#{issue_number} is eligible from status={current_status}");
+    let issue_index = context.runtime.load_issue_index(issue_number)?;
+    let manifest = if current_status == context.config.issue_analysis_flow.statuses.backlog {
+        github.update_status(
+            &context.repo.repo_root,
+            &context.config.github.project_id,
+            &issue.item_id,
+            &snapshot.status_field_id,
+            snapshot.option_id_by_name(
+                &context
+                    .config
+                    .issue_analysis_flow
+                    .statuses
+                    .analysis_in_progress,
+            )?,
+        )?;
+        context.runtime.create_claim_binding(
+            &context.repo,
+            &context.config.github.project_id,
+            &context.config.zellij,
+            issue_number,
+        )?
+    } else {
+        github.update_status(
+            &context.repo.repo_root,
+            &context.config.github.project_id,
+            &issue.item_id,
+            &snapshot.status_field_id,
+            snapshot.option_id_by_name(
+                &context
+                    .config
+                    .issue_analysis_flow
+                    .statuses
+                    .analysis_in_progress,
+            )?,
+        )?;
+        context.runtime.update_issue_flow_status(
+            issue_number,
+            &context
+                .config
+                .issue_analysis_flow
+                .statuses
+                .analysis_in_progress,
+        )?;
+        let issue_index = issue_index.ok_or_else(|| {
+            anyhow::anyhow!("missing issue session index for issue #{issue_number}")
+        })?;
+        context
+            .runtime
+            .load_session_manifest(&issue_index.session_uuid)?
+            .ok_or_else(|| anyhow::anyhow!("missing session manifest for issue #{issue_number}"))?
+    };
+
+    let binary_path = std::env::current_exe().context("failed to resolve ai-teamlead binary")?;
+    zellij.launch_issue_analysis(
+        &context.repo.repo_root,
+        &context.runtime,
+        &context.config.zellij,
+        issue_number,
+        &manifest.session_uuid,
+        &binary_path,
+    )?;
+
+    println!(
+        "run: issue=#{issue_number} relaunched in zellij session_uuid={}",
+        manifest.session_uuid
+    );
+    Ok(())
+}
+
+fn run_internal(shell: &dyn Shell, internal: InternalCommand) -> Result<()> {
+    match internal {
+        InternalCommand::CaptureZellijContext { session_uuid } => {
+            run_internal_capture_zellij_context(shell, &session_uuid)
+        }
+        InternalCommand::LaunchZellijFixture { issue } => {
+            run_internal_launch_zellij_fixture(shell, issue)
+        }
+    }
+}
+
+fn run_internal_capture_zellij_context(shell: &dyn Shell, session_uuid: &str) -> Result<()> {
+    let context = load_execution_context(shell)?;
+    let (session_id, tab_id, pane_id) = capture_current_binding(
+        shell,
+        &context.repo.repo_root,
+        &context.runtime,
+        &context.config.zellij,
+        session_uuid,
+    )?;
+    println!(
+        "captured zellij context: session_uuid={} session_id={} tab_id={} pane_id={}",
+        session_uuid, session_id, tab_id, pane_id
+    );
+    Ok(())
+}
+
+fn run_internal_launch_zellij_fixture(shell: &dyn Shell, issue_number: u64) -> Result<()> {
+    let context = load_execution_context(shell)?;
+    let manifest = context.runtime.create_claim_binding(
+        &context.repo,
+        &context.config.github.project_id,
+        &context.config.zellij,
+        issue_number,
+    )?;
+    let zellij = ZellijLauncher::new(shell);
+    let binary_path = std::env::current_exe().context("failed to resolve ai-teamlead binary")?;
+    zellij.launch_issue_analysis(
+        &context.repo.repo_root,
+        &context.runtime,
+        &context.config.zellij,
+        issue_number,
+        &manifest.session_uuid,
+        &binary_path,
+    )?;
+    println!(
+        "fixture launch requested: issue=#{issue_number} session_uuid={}",
+        manifest.session_uuid
+    );
     Ok(())
 }
 

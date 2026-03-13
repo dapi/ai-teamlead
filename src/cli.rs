@@ -12,5 +12,18 @@ pub struct Cli {
 pub enum Command {
     Daemon,
     Poll,
-    Run { issue: String },
+    Run {
+        issue: String,
+    },
+    #[command(hide = true)]
+    Internal {
+        #[command(subcommand)]
+        internal: InternalCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum InternalCommand {
+    CaptureZellijContext { session_uuid: String },
+    LaunchZellijFixture { issue: u64 },
 }

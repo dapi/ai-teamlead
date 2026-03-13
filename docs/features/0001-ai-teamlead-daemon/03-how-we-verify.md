@@ -16,6 +16,7 @@
 - при ошибке смены статуса flow не стартует
 - daemon не использует локальную базу как источник истины по состоянию issue
 - daemon создает durable-связку между issue и `session_uuid`
+- launcher записывает `zellij.session_id`, `zellij.tab_id`, `zellij.pane_id`
 
 ## Критерии готовности
 
@@ -126,6 +127,12 @@ Feature считается готовой к первому использова
 - диагностические артефакты в `.git/ai-teamlead/`
 - session-артефакты, позволяющие восстановить вопросы, план и действия оператора
 
+Для launcher дополнительно достаточно видеть:
+
+- `launch-layout.kdl`
+- `launch-agent.sh`
+- `capture.log`
+
 ## Связанные документы
 
 - [README.md](/home/danil/code/teamlead/README.md)
@@ -139,3 +146,4 @@ Feature считается готовой к первому использова
 - [docs/adr/0007-no-separate-health-interface-in-mvp.md](/home/danil/code/teamlead/docs/adr/0007-no-separate-health-interface-in-mvp.md)
 - [docs/adr/0008-bind-issue-to-agent-session-uuid.md](/home/danil/code/teamlead/docs/adr/0008-bind-issue-to-agent-session-uuid.md)
 - [docs/adr/0009-deterministic-backlog-ordering.md](/home/danil/code/teamlead/docs/adr/0009-deterministic-backlog-ordering.md)
+- [docs/adr/0011-use-zellij-main-release-in-ci.md](/home/danil/code/teamlead/docs/adr/0011-use-zellij-main-release-in-ci.md)

@@ -66,6 +66,7 @@
 - GitHub owner/repo жестко берутся из текущего git-репозитория
 - каждая issue в анализе имеет связанную агентскую сессию с `session_uuid`
 - `poll` выбирает issue из `Backlog` по возрастанию issue number
+- docker-based CI для `zellij` использует pinned release из `dapi/zellij-main`
 
 Дополнительные правила реализации:
 
@@ -126,6 +127,12 @@ Repo-local runtime-артефакты daemon хранятся в:
 - `zellij.session_id`, `zellij.tab_id`, `zellij.pane_id`
 - журнал нормализованных действий оператора
 
+Для `zellij` launcher дополнительно создаются:
+
+- `launch-layout.kdl`
+- `launch-agent.sh`
+- `capture.log`
+
 Точная схема файлов и полей вынесена в:
 
 - [05-runtime-artifacts.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/05-runtime-artifacts.md)
@@ -164,3 +171,16 @@ Repo-local runtime-артефакты daemon хранятся в:
 - команда не должна обходить правила transition model
 - для waiting-статусов команда опирается на durable session-артефакты, а не на
   эвристику по текущему процессу
+
+## Launcher
+
+`zellij` launcher работает так:
+
+- создает `launch-layout.kdl` и `launch-agent.sh` в session-директории
+- если zellij session еще не существует, запускает новую session через
+  `zellij --session <name> -n <layout>`
+- если session уже существует, добавляет tab через
+  `zellij --session <name> --layout <layout>`
+- стартовый скрипт внутри pane вызывает внутреннюю команду
+  `capture-zellij-context`, которая записывает `session_id`, `tab_id`,
+  `pane_id` в `session.json`
