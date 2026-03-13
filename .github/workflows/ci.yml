@@ -60,5 +60,6 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}/target/debug/ai-teamlead:/test/bin/ai-teamlead:ro" \
             -v "${{ github.workspace }}/tests/integration:/test/tests:ro" \
+            -v "${{ github.workspace }}/templates:/test/bin/templates:ro" \
             ai-teamlead-zellij-test \
             /test/tests/docker-test-runner.sh
