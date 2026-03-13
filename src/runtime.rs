@@ -18,7 +18,7 @@ pub struct RuntimeLayout {
 
 impl RuntimeLayout {
     pub fn from_repo_root(repo_root: &Path) -> Self {
-        let root = repo_root.join(".git").join("ai-teamlead");
+        let root = repo_root.join(".git").join(".ai-teamlead");
         let lock_dir = root.join("lock");
         let sessions_dir = root.join("sessions");
         let issues_dir = root.join("issues");
@@ -336,15 +336,15 @@ mod tests {
     #[test]
     fn builds_expected_layout() {
         let layout = RuntimeLayout::from_repo_root(Path::new("/repo"));
-        assert_eq!(layout.root, Path::new("/repo/.git/ai-teamlead"));
-        assert_eq!(layout.lock_dir, Path::new("/repo/.git/ai-teamlead/lock"));
+        assert_eq!(layout.root, Path::new("/repo/.git/.ai-teamlead"));
+        assert_eq!(layout.lock_dir, Path::new("/repo/.git/.ai-teamlead/lock"));
         assert_eq!(
             layout.sessions_dir,
-            Path::new("/repo/.git/ai-teamlead/sessions")
+            Path::new("/repo/.git/.ai-teamlead/sessions")
         );
         assert_eq!(
             layout.issues_dir,
-            Path::new("/repo/.git/ai-teamlead/issues")
+            Path::new("/repo/.git/.ai-teamlead/issues")
         );
     }
 

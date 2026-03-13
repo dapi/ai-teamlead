@@ -172,7 +172,7 @@ Poller или ручной запуск выбирает одну подходя
 - генерируется `session_uuid`
 - issue связывается с этим `session_uuid` в отношении `1 <-> 1`
 - сохраняются `zellij.session_id`, `zellij.tab_id` и `zellij.pane_id`
-- session-артефакты сохраняются в `.git/ai-teamlead/`
+- session-артефакты сохраняются в `.git/.ai-teamlead/`
 
 ### 2. Анализ
 
@@ -377,7 +377,7 @@ issue.
 - временные артефакты анализа
 - lock-файлы уровня процесса, если они нужны для защиты от параллельного запуска
   poller
-- repo-local runtime-артефакты в `.git/ai-teamlead/`
+- repo-local runtime-артефакты в `.git/.ai-teamlead/`
 - durable session-артефакты, связывающие issue и `session_uuid`
 
 Точная схема runtime/session-артефактов должна задаваться отдельным документом
@@ -431,7 +431,7 @@ Issue должна переводиться в `Analysis Blocked`, если:
   номером
 - добавлено правило выносить разросшуюся документацию фич в отдельные
   директории связанных документов
-- зафиксировано хранение repo-local runtime-артефактов в `.git/ai-teamlead/`
+- зафиксировано хранение repo-local runtime-артефактов в `.git/.ai-teamlead/`
 - зафиксирован минимальный CLI-контракт с командами `poll` и `run`
 - GitHub owner/repo для MVP жестко привязаны к текущему git-репозиторию
 - добавлена durable-связка `issue <-> session_uuid` и сохранение session-

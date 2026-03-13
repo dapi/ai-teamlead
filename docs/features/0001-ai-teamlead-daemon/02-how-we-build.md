@@ -55,12 +55,13 @@
 Уже принятые решения:
 
 - repo-local конфиг `./.ai-teamlead/settings.yml`
+- versioned project-local flow в `./.ai-teamlead/flows/issue-analysis-flow.md`
 - standalone daemon в foreground
 - single-process loop
 - язык реализации MVP: Rust
 - GitHub Project status как источник истины
 - `max_parallel: 1` для MVP
-- repo-local runtime-артефакты в `.git/ai-teamlead/`
+- repo-local runtime-артефакты в `.git/.ai-teamlead/`
 - минимальный CLI-контракт состоит из команд `poll` и `run`
 - базовый GitHub integration layer строится на `gh` CLI
 - GitHub owner/repo жестко берутся из текущего git-репозитория
@@ -114,7 +115,7 @@ zellij:
 Repo-local runtime-артефакты daemon хранятся в:
 
 ```text
-.git/ai-teamlead/
+.git/.ai-teamlead/
 ```
 
 Внутри этой директории на первом этапе допускаются:

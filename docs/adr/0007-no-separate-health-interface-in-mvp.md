@@ -28,7 +28,7 @@
 
 - stdout/stderr логов foreground daemon
 - явных сообщений об ошибках у ручных команд `poll` и `run`
-- repo-local диагностических артефактов в `.git/ai-teamlead/`
+- repo-local диагностических артефактов в `.git/.ai-teamlead/`
 
 Отдельная команда `status`, отдельный endpoint или отдельный постоянный status
 file в первую версию не входят.

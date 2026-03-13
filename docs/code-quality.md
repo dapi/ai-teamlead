@@ -68,7 +68,7 @@
 - работы CLI `poll` на тестовом runtime-контексте
 - работы CLI `run` на тестовом runtime-контексте
 - взаимодействия с оберткой над `gh`
-- создания runtime-артефактов в `.git/ai-teamlead/`
+- создания runtime-артефактов в `.git/.ai-teamlead/`
 - запуска launcher-контракта для `zellij` без требования real end-to-end UI
 
 Для MVP допустимо использовать test doubles или fake adapters там, где прямой

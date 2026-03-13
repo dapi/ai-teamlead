@@ -9,6 +9,8 @@ use crate::domain::{
     RunSessionFacts, can_run_analysis, parse_issue_ref, select_next_backlog_project_item,
 };
 use crate::github::GhProjectClient;
+use crate::init::init_project_files;
+use crate::project_files::ProjectPaths;
 use crate::repo::RepoContext;
 use crate::runtime::{RuntimeLayout, derive_run_session_facts};
 use crate::shell::{Shell, SystemShell};
@@ -20,10 +22,33 @@ pub fn run() -> Result<()> {
 
     match cli.command {
         Some(Command::Daemon) | None => run_daemon(&shell),
+        Some(Command::Init) => run_init(&shell),
         Some(Command::Poll) => run_poll(&shell),
         Some(Command::Run { issue }) => run_manual_run(&shell, &issue),
         Some(Command::Internal { internal }) => run_internal(&shell, internal),
     }
+}
+
+fn run_init(shell: &dyn Shell) -> Result<()> {
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    let repo = RepoContext::discover(shell, &cwd)?;
+    let paths = ProjectPaths::from_repo_root(&repo.repo_root);
+    let report = init_project_files(&paths)?;
+
+    println!(
+        "init: repo={}/{} root={}",
+        repo.github_owner,
+        repo.github_repo,
+        repo.repo_root.display()
+    );
+    for path in &report.created {
+        println!("created: {}", path.display());
+    }
+    for path in &report.skipped {
+        println!("skipped: {}", path.display());
+    }
+
+    Ok(())
 }
 
 fn run_daemon(shell: &dyn Shell) -> Result<()> {

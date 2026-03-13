@@ -14,8 +14,12 @@ pub struct Config {
 
 impl Config {
     pub fn load_from_repo_root(repo_root: &Path) -> Result<Self> {
-        let path = repo_root.join("ai-teamlead.yml");
+        let path = Self::path_from_repo_root(repo_root);
         Self::load_from_path(&path)
+    }
+
+    pub fn path_from_repo_root(repo_root: &Path) -> std::path::PathBuf {
+        repo_root.join(".ai-teamlead").join("settings.yml")
     }
 
     pub fn load_from_path(path: &Path) -> Result<Self> {
@@ -120,7 +124,7 @@ zellij:
 
     #[test]
     fn parses_valid_config() {
-        let path = PathBuf::from("/tmp/ai-teamlead.yml");
+        let path = PathBuf::from("/tmp/.ai-teamlead/settings.yml");
         let config: Config = serde_yaml::from_str(sample_config()).expect("yaml should parse");
         config.validate(&path).expect("config should validate");
         assert_eq!(config.github.project_id, "PVT_kwHNeaPOAUaljg");
@@ -131,7 +135,7 @@ zellij:
     fn rejects_zero_poll_interval() {
         let yaml =
             sample_config().replace("poll_interval_seconds: 3600", "poll_interval_seconds: 0");
-        let path = PathBuf::from("/tmp/ai-teamlead.yml");
+        let path = PathBuf::from("/tmp/.ai-teamlead/settings.yml");
         let config: Config = serde_yaml::from_str(&yaml).expect("yaml should parse");
         let error = config.validate(&path).expect_err("validation should fail");
         assert!(error.to_string().contains("poll_interval_seconds"));

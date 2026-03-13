@@ -18,7 +18,7 @@
 Все runtime-артефакты MVP хранятся в:
 
 ```text
-.git/ai-teamlead/
+.git/.ai-teamlead/
 ```
 
 ## Структура директорий
@@ -26,7 +26,7 @@
 Минимальная структура:
 
 ```text
-.git/ai-teamlead/
+.git/.ai-teamlead/
   lock/
     poll.lock
   sessions/

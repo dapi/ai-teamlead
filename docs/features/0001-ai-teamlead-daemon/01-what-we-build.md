@@ -41,6 +41,7 @@
 
 - standalone daemon
 - repo-local конфиг `./.ai-teamlead/settings.yml`
+- использование versioned project-local contract из `./.ai-teamlead/`
 - polling loop
 - выбор одной issue в рамках `max_parallel: 1`
 - запуск `issue-analysis-flow`

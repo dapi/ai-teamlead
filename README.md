@@ -63,6 +63,7 @@ Daemon:
 
 Также должны существовать ручные команды:
 
+- `init`
 - `poll`
 - `run`
 
@@ -191,7 +192,29 @@ zellij:
   Если вынесем prompt-файлы в конфигурируемые пути.
 
 Для MVP durable-связка между issue и агентской сессией хранится в repo-local
-runtime-артефактах внутри `.git/ai-teamlead/`.
+runtime-артефактах внутри `.git/.ai-teamlead/`.
+
+## Project contract layer
+
+Versioned project-local contract живет в рабочем дереве репозитория:
+
+```text
+.ai-teamlead/
+  README.md
+  settings.yml
+  flows/
+    issue-analysis-flow.md
+```
+
+Инициализация этого слоя оформляется отдельной ручной командой:
+
+- `ai-teamlead init`
+
+Runtime state и временные артефакты при этом живут отдельно в:
+
+```text
+.git/.ai-teamlead/
+```
 
 Ограничение MVP:
 

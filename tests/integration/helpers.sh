@@ -86,10 +86,10 @@ wait_for_json_field_not_value() {
 
 create_test_repo() {
     local repo_root="$1"
-    mkdir -p "$repo_root"
+    mkdir -p "$repo_root/.ai-teamlead"
     git init -q "$repo_root"
     git -C "$repo_root" remote add origin git@github.com:dapi/teamlead.git
-    cat > "$repo_root/ai-teamlead.yml" <<'EOF'
+    cat > "$repo_root/.ai-teamlead/settings.yml" <<'EOF'
 github:
   project_id: "PVT_test_project"
 

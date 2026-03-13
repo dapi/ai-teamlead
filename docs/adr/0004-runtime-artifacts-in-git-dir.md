@@ -1,4 +1,4 @@
-# ADR-0004: Repo-local runtime-артефакты в `.git/ai-teamlead/`
+# ADR-0004: Repo-local runtime-артефакты в `.git/.ai-teamlead/`
 
 Статус: accepted
 Дата: 2026-03-13
@@ -23,7 +23,7 @@ repo-local runtime-артефакты.
 
 ## Решение
 
-Repo-local runtime-артефакты хранятся в `.git/ai-teamlead/`.
+Repo-local runtime-артефакты хранятся в `.git/.ai-teamlead/`.
 
 В этой директории допускается хранить:
 

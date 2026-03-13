@@ -11,6 +11,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Daemon,
+    Init,
     Poll,
     Run {
         issue: String,

@@ -11,7 +11,7 @@ AI_TEAMLEAD_BIN="/test/bin/ai-teamlead"
     "$AI_TEAMLEAD_BIN" internal launch-zellij-fixture 42
 )
 
-ISSUE_INDEX="$REPO_ROOT/.git/ai-teamlead/issues/42.json"
+ISSUE_INDEX="$REPO_ROOT/.git/.ai-teamlead/issues/42.json"
 if ! wait_for_file "$ISSUE_INDEX"; then
     echo "  FAIL: issue index file created"
     ((FAIL++)) || true
@@ -20,10 +20,10 @@ fi
 assert_file_exists "$ISSUE_INDEX" "issue index file created"
 
 SESSION_UUID="$(jq -r '.session_uuid' "$ISSUE_INDEX")"
-SESSION_MANIFEST="$REPO_ROOT/.git/ai-teamlead/sessions/$SESSION_UUID/session.json"
-LAYOUT_FILE="$REPO_ROOT/.git/ai-teamlead/sessions/$SESSION_UUID/launch-layout.kdl"
-ENTRYPOINT_FILE="$REPO_ROOT/.git/ai-teamlead/sessions/$SESSION_UUID/launch-agent.sh"
-CAPTURE_LOG="$REPO_ROOT/.git/ai-teamlead/sessions/$SESSION_UUID/capture.log"
+SESSION_MANIFEST="$REPO_ROOT/.git/.ai-teamlead/sessions/$SESSION_UUID/session.json"
+LAYOUT_FILE="$REPO_ROOT/.git/.ai-teamlead/sessions/$SESSION_UUID/launch-layout.kdl"
+ENTRYPOINT_FILE="$REPO_ROOT/.git/.ai-teamlead/sessions/$SESSION_UUID/launch-agent.sh"
+CAPTURE_LOG="$REPO_ROOT/.git/.ai-teamlead/sessions/$SESSION_UUID/capture.log"
 
 if ! wait_for_file "$SESSION_MANIFEST"; then
     echo "  FAIL: session manifest created"
