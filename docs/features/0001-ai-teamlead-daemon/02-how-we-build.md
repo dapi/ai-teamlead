@@ -98,12 +98,15 @@ runtime:
   poll_interval_seconds: 3600
 
 zellij:
-  session_name: "ai-teamlead"
+  session_name: "{repo_name}-ai-teamlead"
   tab_name: "issue-analysis"
 ```
 
 Здесь:
 
+- `session_name` формируется по правилу из
+  [ADR-0014](../../../docs/adr/0014-zellij-launch-context-naming.md):
+  `{repo_name}-ai-teamlead`, где `repo_name` — имя текущего git-репозитория
 - `session_name` и `tab_name` это стабильные project-local идентификаторы для
   bootstrap и orchestration
 - runtime `session_id`, `tab_id`, `pane_id` не задаются в конфиге

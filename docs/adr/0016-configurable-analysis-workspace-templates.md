@@ -65,6 +65,8 @@ Bootstrap defaults:
 
 - [README.md](/home/danil/code/teamlead/README.md)
 - [docs/features/0003-agent-launch-orchestration/README.md](/home/danil/code/teamlead/docs/features/0003-agent-launch-orchestration/README.md)
+- [docs/adr/0012-repo-init-command-and-project-contract-layer.md](/home/danil/code/teamlead/docs/adr/0012-repo-init-command-and-project-contract-layer.md)
+- [docs/adr/0014-zellij-launch-context-naming.md](/home/danil/code/teamlead/docs/adr/0014-zellij-launch-context-naming.md)
 - [docs/adr/0015-versioned-launch-agent-contract.md](/home/danil/code/teamlead/docs/adr/0015-versioned-launch-agent-contract.md)
 
 ## Журнал изменений

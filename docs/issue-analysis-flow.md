@@ -635,6 +635,13 @@ Issue должна переводиться в `Analysis Blocked`, если:
 - нужно ли позже возвращать machine-readable артефакты поверх истории
   агентской сессии
 
+## Связанные документы
+
+- [docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md](/home/danil/code/teamlead/docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md)
+- [docs/adr/0019-conditional-sections-by-task-type-project-type-and-size.md](/home/danil/code/teamlead/docs/adr/0019-conditional-sections-by-task-type-project-type-and-size.md)
+- [docs/adr/0013-agent-session-history-as-dialog-source.md](/home/danil/code/teamlead/docs/adr/0013-agent-session-history-as-dialog-source.md)
+- [docs/features/0001-ai-teamlead-daemon/README.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/README.md)
+
 ## Журнал изменений
 
 ### 2026-03-13
