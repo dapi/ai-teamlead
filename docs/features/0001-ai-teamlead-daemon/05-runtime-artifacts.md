@@ -1,7 +1,7 @@
 # Feature 0001: Runtime-артефакты
 
 Статус: draft
-Последнее обновление: 2026-03-13
+Последнее обновление: 2026-03-14
 
 ## Назначение
 
@@ -82,6 +82,13 @@
 - `waiting_for_plan_review`
 - `completed`
 - `blocked`
+
+Важно не смешивать разные словари состояний:
+
+- `session.json.status` это локальный lifecycle session-binding
+- `issues/<issue_number>.json.last_known_flow_status` это последнее локально
+  известное значение flow-статуса из GitHub Project
+- source of truth по status issue остается в GitHub Project, а не в runtime json
 
 ### `sessions/<session_uuid>/launch-layout.kdl`
 

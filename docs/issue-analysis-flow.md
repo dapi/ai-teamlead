@@ -627,6 +627,16 @@ Degraded mode для launcher:
 Точная схема runtime/session-артефактов должна задаваться отдельным документом
 feature-уровня.
 
+При чтении runtime-документов нужно различать три разных status-словаря:
+
+- `GitHub Project status`:
+  `Backlog`, `Analysis In Progress`, `Waiting for Clarification`,
+  `Waiting for Plan Review`, `Ready for Implementation`, `Analysis Blocked`
+- `session.json.status`: локальный lifecycle session-binding, например
+  `active` или `completed`
+- `issues/<issue_number>.json.last_known_flow_status`: последнее локально
+  известное значение flow-статуса из GitHub Project
+
 Недопустимый локальный state:
 
 - постоянная локальная база состояния issue
