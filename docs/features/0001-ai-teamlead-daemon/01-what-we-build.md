@@ -30,7 +30,7 @@
 
 - запускается в foreground
 - работает в контексте одного репозитория
-- читает `ai-teamlead.yml` из корня репозитория
+- читает `./.ai-teamlead/settings.yml` из репозитория
 - периодически ищет подходящую issue в GitHub Project
 - переводит issue в `Analysis In Progress`
 - запускает `issue-analysis-flow` в настроенной `zellij` session и tab
@@ -40,7 +40,7 @@
 В первую версию входит:
 
 - standalone daemon
-- repo-local конфиг `ai-teamlead.yml`
+- repo-local конфиг `./.ai-teamlead/settings.yml`
 - polling loop
 - выбор одной issue в рамках `max_parallel: 1`
 - запуск `issue-analysis-flow`

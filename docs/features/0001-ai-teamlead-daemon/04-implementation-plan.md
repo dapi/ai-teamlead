@@ -28,7 +28,7 @@
 
 - иметь запускаемый process entrypoint
 - уметь находить текущий репозиторий
-- читать `ai-teamlead.yml`
+- читать `./.ai-teamlead/settings.yml`
 - валидировать минимальный конфиг
 
 Результат этапа:
@@ -154,7 +154,7 @@
 
 Минимальный набор:
 
-- daemon стартует в repo с `ai-teamlead.yml`
+- daemon стартует в repo с `./.ai-teamlead/settings.yml`
 - `poll` берет issue из `Backlog`
 - при нескольких issues `poll` берет минимальный issue number
 - `run` запускает допустимую issue
@@ -167,7 +167,7 @@
 MVP можно считать реализованным, если:
 
 - foreground daemon запускается в одном репозитории
-- `ai-teamlead.yml` читается и валидируется
+- `./.ai-teamlead/settings.yml` читается и валидируется
 - `gh` integration работает для чтения и смены статусов
 - `poll` и `run` работают по контракту
 - `issue-analysis-flow` запускается через `zellij`

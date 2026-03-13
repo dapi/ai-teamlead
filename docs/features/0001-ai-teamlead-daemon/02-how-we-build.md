@@ -6,7 +6,7 @@
 
 Состав решения:
 
-- загрузчик repo-local конфига `ai-teamlead.yml`
+- загрузчик repo-local конфига `./.ai-teamlead/settings.yml`
 - polling loop
 - GitHub adapter на базе `gh` CLI для чтения и изменения состояния issue в
   Project
@@ -18,7 +18,7 @@
 Ключевые входные данные:
 
 - repo context текущего git-репозитория
-- конфиг `ai-teamlead.yml`
+- конфиг `./.ai-teamlead/settings.yml`
 - GitHub Project id
 - mapping статусных имен для `issue-analysis-flow`
 
@@ -54,7 +54,7 @@
 
 Уже принятые решения:
 
-- repo-local конфиг `ai-teamlead.yml`
+- repo-local конфиг `./.ai-teamlead/settings.yml`
 - standalone daemon в foreground
 - single-process loop
 - язык реализации MVP: Rust
@@ -77,7 +77,7 @@
 
 ## Конфигурация
 
-Минимальный контракт `ai-teamlead.yml`:
+Минимальный контракт `./.ai-teamlead/settings.yml`:
 
 ```yaml
 github:
@@ -150,7 +150,7 @@ Repo-local runtime-артефакты daemon хранятся в:
 Правила:
 
 - команда работает в контексте текущего репозитория
-- команда читает `ai-teamlead.yml` из корня репозитория
+- команда читает `./.ai-teamlead/settings.yml` из репозитория
 - команда выбирает только issue со статусом `Backlog`
 - команда не принимает issue как аргумент
 - команда не должна брать больше `runtime.max_parallel` issues за цикл
