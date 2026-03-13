@@ -36,13 +36,19 @@ Versioned project contract layer хранится в:
 
 - `./.ai-teamlead/`
 
-В первой версии `init` должна создавать только versioned-файлы:
+В первой версии `init` должна создавать versioned-файлы contract layer:
 
 - `./.ai-teamlead/settings.yml`
 - `./.ai-teamlead/README.md`
 - `./.ai-teamlead/init.sh`
 - `./.ai-teamlead/launch-agent.sh`
 - `./.ai-teamlead/flows/issue-analysis-flow.md`
+- `./.ai-teamlead/flows/issue-analysis/README.md`
+- `./.ai-teamlead/flows/issue-analysis/01-what-we-build.md`
+- `./.ai-teamlead/flows/issue-analysis/02-how-we-build.md`
+- `./.ai-teamlead/flows/issue-analysis/03-how-we-verify.md`
+- `./.claude/README.md`
+- `./.codex/README.md`
 
 Если в корне репозитория отсутствует `./init.sh`, `init` дополнительно создает
 симлинк:

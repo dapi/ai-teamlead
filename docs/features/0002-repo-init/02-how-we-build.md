@@ -105,6 +105,17 @@
 - `launch_agent.analysis_artifacts_dir_template` по умолчанию равно
   `specs/issues/${ISSUE_NUMBER}`
 
+Операторские действия после `init`:
+
+1. вручную заменить `github.project_id` placeholder на реальный GitHub Project
+   id
+2. при необходимости скорректировать `zellij.session_name`
+3. при необходимости скорректировать `launch_agent.*` templates
+4. только после этого запускать `poll` или `run`
+
+Если placeholder не заменен или id невалиден, текущая реализация не проходит
+этап загрузки project snapshot и завершает `poll`/`run` ошибкой.
+
 ## Ограничения реализации
 
 - первая версия использует встроенные шаблоны, а не внешний template registry

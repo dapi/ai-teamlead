@@ -66,7 +66,7 @@
   "created_at": "2026-03-13T12:00:00Z",
   "updated_at": "2026-03-13T12:00:00Z",
   "zellij": {
-    "session_name": "ai-teamlead",
+    "session_name": "teamlead-ai-teamlead",
     "tab_name": "issue-analysis",
     "session_id": "zellij-session-id",
     "tab_id": "zellij-tab-id",
@@ -145,8 +145,9 @@
 
 - для всех waiting-статусов и `Analysis Blocked` проверять наличие
   существующего session-binding
-- использовать `session.json` для повторного входа в уже связанную агентскую
-  сессию
+- использовать `session.json` для reuse существующего `session_uuid`
+- при повторном `run` открывать новую pane в stable `zellij` launch context, а
+  не пытаться вернуть пользователя в старую pane
 - не пытаться восстанавливать диалог из отдельных JSON-артефактов
 
 ## Диагностическая ценность

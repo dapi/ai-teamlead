@@ -33,6 +33,23 @@ Bootstrap defaults:
 - worktree root: `${HOME}/worktrees/${REPO}/${BRANCH}`
 - artifacts dir: `specs/issues/${ISSUE_NUMBER}`
 
+Поддерживаемые placeholder-переменные в текущей реализации:
+
+- для `analysis_branch_template`: `${HOME}`, `${REPO}`, `${ISSUE_NUMBER}`
+- для `worktree_root_template`: `${HOME}`, `${REPO}`, `${ISSUE_NUMBER}`,
+  `${BRANCH}`
+- для `analysis_artifacts_dir_template`: `${HOME}`, `${REPO}`,
+  `${ISSUE_NUMBER}`, `${BRANCH}`
+
+Семантика MVP:
+
+- интерполяция делается простым string replace внутри `ai-teamlead`
+- неизвестные placeholder-переменные не валидируются и остаются в строке как
+  литералы
+- `worktree_root_template` должен рендериться в абсолютный путь
+- `analysis_artifacts_dir_template` интерпретируется как путь относительно
+  analysis worktree root
+
 ## Последствия
 
 Плюсы:

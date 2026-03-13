@@ -66,7 +66,7 @@
 - базовый GitHub integration layer строится на `gh` CLI
 - GitHub owner/repo жестко берутся из текущего git-репозитория
 - каждая issue в анализе имеет связанную агентскую сессию с `session_uuid`
-- `poll` выбирает issue из `Backlog` по возрастанию issue number
+- `poll` выбирает issue из `Backlog` в порядке snapshot GitHub Project
 - docker-based CI для `zellij` использует pinned release из `dapi/zellij-main`
 
 Дополнительные правила реализации:

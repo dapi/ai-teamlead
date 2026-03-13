@@ -91,6 +91,7 @@ Bootstrap default для первой версии:
 - если в окружении доступен `codex`, launcher стартует его интерактивно
 - если `codex` отсутствует, launcher оставляет пользователя в shell внутри
   подготовленного analysis worktree
+- это считается допустимым degraded mode, а не отдельным типом analysis flow
 
 Инварианты:
 
@@ -99,6 +100,8 @@ Bootstrap default для первой версии:
 - `issue-analysis-flow` не отвечает за эти git-операции
 - naming и пути берутся из `settings.yml`, а их применение остается
   ответственностью `launch-agent.sh`
+- при повторном `run` в waiting-статусах используется существующий
+  `session_uuid`, но все равно создается новая pane для нового launcher path
 
 ## Corner cases
 
@@ -192,3 +195,13 @@ launch_agent:
 
 В bootstrap-реализации `session_name` должен материализоваться уже с реальным
 именем текущего репозитория.
+
+Поддерживаемые placeholder-переменные в первой версии:
+
+- `${HOME}`
+- `${REPO}`
+- `${ISSUE_NUMBER}`
+- `${BRANCH}` для worktree root и artifacts dir
+
+Неизвестные placeholder-переменные текущая реализация не валидирует и оставляет
+в строке как литералы.

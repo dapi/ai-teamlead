@@ -268,8 +268,8 @@ TUI/CLI-контрола или формализованных action-кнопо
 
 Для `feature` issue дополнительно обязательны:
 
-- `feature story`
-- `use cases`
+- `User Story`
+- `Use Cases`
 
 План должен пройти внутреннее ревью до публикации и не должен содержать
 известных пробелов или противоречий.
@@ -309,25 +309,30 @@ TUI/CLI-контрола или формализованных action-кнопо
 
 - проблему
 - пользователя или роль
+- ожидаемый результат
 - scope и non-goals
+- ограничения, предпосылки и допущения
 - минимально достаточный продуктовый контракт
 
 `02-how-we-build.md` должен содержать минимум:
 
 - архитектурный подход
 - данные, интерфейсы и ограничения
+- конфигурацию и runtime-допущения, если они влияют на поведение
 - ключевые технические решения
 
 `03-how-we-verify.md` должен содержать минимум:
 
 - acceptance criteria
+- критерии готовности
+- инварианты
 - test plan
 - verification checklist
 
 Для `feature` issue в комплекте артефактов дополнительно обязательны:
 
-- `feature story`
-- `use cases`
+- `User Story`
+- `Use Cases`
 
 Они могут быть как отдельными разделами внутри `01-what-we-build.md`, так и
 вынесенными в отдельные связанные документы, если issue этого требует.
@@ -376,8 +381,10 @@ TUI/CLI-контрола или формализованных action-кнопо
 
 - `Problem`
 - `Who Is It For`
+- `Outcome`
 - `Scope`
 - `Non-Goals`
+- `Constraints And Assumptions`
 
 `conditional`:
 
@@ -395,7 +402,6 @@ TUI/CLI-контрола или формализованных action-кнопо
 `scaling`:
 
 - для `medium` и `large`:
-  - `Constraints`
   - `Dependencies`
 
 ### `02-how-we-build.md`
@@ -405,6 +411,7 @@ TUI/CLI-контрола или формализованных action-кнопо
 - `Approach`
 - `Affected Areas`
 - `Interfaces And Data`
+- `Configuration And Runtime Assumptions`
 - `Risks`
 
 `conditional`:
@@ -427,6 +434,8 @@ TUI/CLI-контрола или формализованных action-кнопо
 `core`:
 
 - `Acceptance Criteria`
+- `Ready Criteria`
+- `Invariants`
 - `Test Plan`
 - `Verification Checklist`
 
@@ -439,18 +448,16 @@ TUI/CLI-контрола или формализованных action-кнопо
   - `Edge Cases`
 - для `chore`:
   - `Operational Validation`
-
-`scaling`:
-
-- для `medium` и `large`:
+- если есть заметные риски отказа:
   - `Failure Scenarios`
+- если для проверки важны runtime-сигналы:
   - `Observability`
 
 Правило компактности:
 
 - для `small` issue включай только `core` и минимально нужные `conditional`
 - для `medium` issue включай `core` и все релевантные `conditional`
-- для `large` issue включай `core`, `conditional` и `scaling`, а при
+- для `large` issue включай `core` и все релевантные `conditional`, а при
   необходимости выноси части в отдельные связанные документы
 
 ### Акценты по типу проекта
@@ -482,7 +489,6 @@ TUI/CLI-контрола или формализованных action-кнопо
 - создан минимум один документ на каждую из трех осей
 - внутри каждого документа присутствуют все обязательные `core`-секции
 - добавлены все релевантные `conditional`-секции
-- для `medium` и `large` issue добавлены релевантные `scaling`-секции
 - комплект остается компактным и не содержит формальных пустых разделов
 
 ## Модель выполнения
@@ -548,7 +554,6 @@ issue.
   session/tab
 - `run` передает агенту project-local `issue-analysis-flow`
 - `run` передает агенту ссылку на GitHub issue как аргумент запуска
-- `run` не должен запускать просто интерактивный shell без агентского процесса
 - versioned launcher-файл должен лежать в `./.ai-teamlead/launch-agent.sh`
 - `launch-agent.sh` должен запускаться из корня репозитория
 - `run` и `poll` должны использовать один и тот же launcher contract
@@ -568,12 +573,25 @@ issue.
 - если issue находится в `Backlog`, она переводится в `Analysis In Progress`
 - если issue находится в `Waiting for Clarification`, она переводится в
   `Analysis In Progress` по явной команде оператора `run`, которая считается
-  намерением продолжить анализ в связанной агентской сессии
+  намерением продолжить анализ с reuse существующего `session_uuid` и запуском
+  новой pane в том же stable launch context
 - если issue находится в `Waiting for Plan Review`, она переводится в
   `Analysis In Progress` по явной команде оператора `run`, которая считается
-  намерением вернуть план в доработку
+  намерением вернуть план в доработку с reuse существующего `session_uuid` и
+  запуском новой pane
 - если issue находится в `Analysis Blocked`, она переводится в
   `Analysis In Progress` только после явного ручного ретрая через `run`
+- для waiting-статусов и `Analysis Blocked` `run` требует существующий
+  runtime-binding `issue <-> session_uuid`; при его отсутствии запуск
+  завершается ошибкой
+- при повторном `run` не переиспользуется старая pane; создается новый launcher
+  path с тем же `session_uuid`
+
+Degraded mode для launcher:
+
+- если в analysis worktree доступен `codex`, launcher запускает его
+- если `codex` отсутствует, launcher оставляет shell внутри уже подготовленного
+  analysis worktree
 
 Недопустимые сценарии для `run`:
 
@@ -650,7 +668,7 @@ Issue должна переводиться в `Analysis Blocked`, если:
 - зафиксирован scope только на анализе и планировании
 - определена модель статусов GitHub Project как источник истины
 - добавлены обязательные human gate для уточнений и принятия плана
-- для `feature` анализа сделаны обязательными `feature story` и `use cases`
+- для `feature` анализа сделаны обязательными `User Story` и `Use Cases`
 - документ объявлен evolving SSOT с обязательным журналом изменений
 - зафиксировано, что вопросы пользователю задаются в агентской сессии, а не в
   комментариях GitHub issue
@@ -673,3 +691,10 @@ Issue должна переводиться в `Analysis Blocked`, если:
 - зафиксирован детерминированный порядок выбора issue из `Backlog`
 - зафиксировано, что источником диалога для MVP является история агентской
   сессии, а не отдельные JSON-артефакты
+
+### 2026-03-14
+
+- выровнены минимальные требования к issue-analysis артефактам с
+  repo-level documentation structure
+- стандартизированы названия секций `User Story` и `Use Cases`
+- уточнен контракт повторного `run` и degraded mode launcher-а без `codex`

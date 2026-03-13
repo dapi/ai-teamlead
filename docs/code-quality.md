@@ -55,7 +55,7 @@
 
 - загрузки и валидации `./.ai-teamlead/settings.yml`
 - определения repo context из текущего git-репозитория
-- выбора issue из `Backlog` по минимальному issue number
+- выбора issue из `Backlog` в детерминированном порядке snapshot GitHub Project
 - проверки допустимости переходов для `run`
 - чтения и записи runtime/session-артефактов
 - проверки invariant `issue <-> session_uuid`
