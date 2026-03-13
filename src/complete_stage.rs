@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
 use crate::config::{Config, FlowStatuses};
 use crate::github::GhProjectClient;
 use crate::runtime::RuntimeLayout;
 use crate::shell::Shell;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
 pub enum StageOutcome {
     PlanReady,
     NeedsClarification,
@@ -15,17 +15,6 @@ pub enum StageOutcome {
 }
 
 impl StageOutcome {
-    pub fn parse(s: &str) -> Result<Self> {
-        match s {
-            "plan-ready" => Ok(Self::PlanReady),
-            "needs-clarification" => Ok(Self::NeedsClarification),
-            "blocked" => Ok(Self::Blocked),
-            other => bail!(
-                "invalid outcome: {other}. Expected: plan-ready, needs-clarification, blocked"
-            ),
-        }
-    }
-
     pub fn target_status<'a>(&self, statuses: &'a FlowStatuses) -> &'a str {
         match self {
             Self::PlanReady => &statuses.waiting_for_plan_review,
@@ -46,10 +35,9 @@ impl StageOutcome {
 pub fn run_complete_stage(
     shell: &dyn Shell,
     session_uuid: &str,
-    outcome: &str,
+    outcome: &StageOutcome,
     message: &str,
 ) -> Result<()> {
-    let outcome = StageOutcome::parse(outcome)?;
     let repo_root = resolve_repo_root(shell)?;
     let config = Config::load_from_repo_root(&repo_root)?;
     let runtime = RuntimeLayout::from_repo_root(&repo_root);
@@ -94,8 +82,11 @@ pub fn run_complete_stage(
     update_project_status(shell, &repo_root, &config, &manifest, target_status)?;
 
     // Step 5: update runtime state
-    runtime.update_session_status(session_uuid, "completed")?;
+    // Order matters: update_issue_flow_status first, then session status.
+    // session status = "completed" is the idempotency guard — writing it last
+    // ensures retries re-execute all preceding steps.
     runtime.update_issue_flow_status(issue_number, target_status)?;
+    runtime.update_session_status(session_uuid, "completed")?;
 
     println!(
         "complete-stage: issue=#{issue_number} outcome={} status={target_status}",
@@ -142,9 +133,11 @@ fn git_add_and_commit(
 
     shell.run(worktree, "git", &["add", artifacts_dir])?;
 
-    // Check if there are staged changes
-    let diff_result = shell.run(worktree, "git", &["diff", "--cached", "--quiet"]);
-    if diff_result.is_ok() {
+    // Check if there are staged changes.
+    // Using --name-only instead of --quiet: --quiet uses exit code 1 for "has changes"
+    // which shell.run() would interpret as an error, masking real git failures.
+    let staged_files = shell.run(worktree, "git", &["diff", "--cached", "--name-only"])?;
+    if staged_files.is_empty() {
         eprintln!("complete-stage: no staged changes, skipping commit");
         return Ok(false);
     }
@@ -167,16 +160,23 @@ fn create_draft_pr_if_needed(
     title: &str,
     body: &str,
 ) -> Result<()> {
-    let existing = shell.run(
+    match shell.run(
         worktree,
         "gh",
         &[
             "pr", "list", "--head", branch, "--json", "number", "--jq", "length",
         ],
-    );
-    if existing.is_ok_and(|count| count.trim() != "0") {
-        eprintln!("complete-stage: draft PR already exists for branch {branch}");
-        return Ok(());
+    ) {
+        Ok(count) if count.trim() != "0" => {
+            eprintln!("complete-stage: draft PR already exists for branch {branch}");
+            return Ok(());
+        }
+        Ok(_) => {} // count == 0, proceed to create
+        Err(e) => {
+            eprintln!("complete-stage: warning: failed to check existing PRs: {e}");
+            eprintln!("complete-stage: skipping PR creation");
+            return Ok(());
+        }
     }
 
     let result = shell.run(
@@ -227,6 +227,7 @@ fn update_project_status(
 mod tests {
     use super::*;
     use crate::config::FlowStatuses;
+    use clap::ValueEnum;
 
     fn sample_statuses() -> FlowStatuses {
         FlowStatuses {
@@ -240,25 +241,24 @@ mod tests {
     }
 
     #[test]
-    fn parses_valid_outcomes() {
-        assert!(matches!(
-            StageOutcome::parse("plan-ready").unwrap(),
-            StageOutcome::PlanReady
-        ));
-        assert!(matches!(
-            StageOutcome::parse("needs-clarification").unwrap(),
-            StageOutcome::NeedsClarification
-        ));
-        assert!(matches!(
-            StageOutcome::parse("blocked").unwrap(),
-            StageOutcome::Blocked
-        ));
+    fn parses_valid_outcomes_via_value_enum() {
+        let variants = StageOutcome::value_variants();
+        assert_eq!(variants.len(), 3);
+
+        let plan_ready = StageOutcome::from_str("plan-ready", true).unwrap();
+        assert_eq!(plan_ready, StageOutcome::PlanReady);
+
+        let needs_clar = StageOutcome::from_str("needs-clarification", true).unwrap();
+        assert_eq!(needs_clar, StageOutcome::NeedsClarification);
+
+        let blocked = StageOutcome::from_str("blocked", true).unwrap();
+        assert_eq!(blocked, StageOutcome::Blocked);
     }
 
     #[test]
-    fn rejects_invalid_outcome() {
-        let err = StageOutcome::parse("unknown").unwrap_err();
-        assert!(err.to_string().contains("invalid outcome"));
+    fn rejects_invalid_outcome_via_value_enum() {
+        let result = StageOutcome::from_str("unknown", true);
+        assert!(result.is_err());
     }
 
     #[test]
