@@ -176,9 +176,12 @@ Poller или ручной запуск выбирает одну подходя
 
 - генерируется `session_uuid`
 - issue связывается с этим `session_uuid` в отношении `1 <-> 1`
-- конфигурация проекта задает стабильные `zellij.session_name` и
-  `zellij.tab_name`
-- orchestration-слой создает или находит нужные session/tab по этим именам
+- target `zellij` session определяется в порядке:
+  `--zellij-session` -> `ZELLIJ_SESSION_NAME` -> `zellij.session_name`
+- `zellij.tab_name` задается конфигурацией проекта
+- orchestration-слой создает или находит нужные session/tab по effective target
+  session и `tab_name`
+- existing session не должна содержать panes из другого GitHub repo
 - после запуска pane в runtime state сохраняются `zellij.session_id`,
   `zellij.tab_id` и `zellij.pane_id`
 - session-артефакты сохраняются в `.git/.ai-teamlead/`
