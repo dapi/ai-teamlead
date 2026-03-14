@@ -149,15 +149,27 @@ Analysis branch: $BRANCH
 Analysis artifacts dir: $ANALYSIS_ARTIFACTS_DIR"
 
     local agent_bin="${AI_TEAMLEAD_AGENT_BIN:-}"
+    local agent_kind="${AI_TEAMLEAD_AGENT_KIND:-}"
     if [[ -n "$agent_bin" && -x "$agent_bin" ]]; then
-        exec "$agent_bin" --cd "$WORKTREE_ROOT" --no-alt-screen "$prompt"
+        case "$agent_kind" in
+            claude)
+                exec "$agent_bin" --permission-mode bypassPermissions "$prompt"
+                ;;
+            *)
+                exec "$agent_bin" --cd "$WORKTREE_ROOT" --no-alt-screen "$prompt"
+                ;;
+        esac
     fi
 
     if command -v codex >/dev/null 2>&1; then
         exec codex --cd "$WORKTREE_ROOT" --no-alt-screen "$prompt"
     fi
 
-    printf 'launch-agent.sh: codex not found, staying in interactive shell inside %s\n' "$WORKTREE_ROOT" >&2
+    if command -v claude >/dev/null 2>&1; then
+        exec claude --permission-mode bypassPermissions "$prompt"
+    fi
+
+    printf 'launch-agent.sh: no supported agent binary found, staying in interactive shell inside %s\n' "$WORKTREE_ROOT" >&2
     exec "${SHELL:-/bin/bash}" -l
 }
 

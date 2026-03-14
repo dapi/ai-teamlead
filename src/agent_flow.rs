@@ -2,7 +2,10 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::fs;
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::Utc;
@@ -17,6 +20,19 @@ const DEFAULT_FIXTURES_DIR: &str = ".ai-teamlead/tests/agent-flow/fixtures";
 const DEFAULT_ARTIFACTS_DIR_NAME: &str = "test-runs";
 const DEFAULT_TIMEOUT_SECONDS: u64 = 900;
 const DEFAULT_SANDBOX_IMAGE: &str = "ai-teamlead-agent-flow-test:local";
+const FORWARDED_RUNTIME_ENV_VARS: &[&str] = &[
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "no_proxy",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "NODE_EXTRA_CA_CERTS",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -182,6 +198,29 @@ struct AgentProfileSpec {
 struct ContainerMount {
     host_path: PathBuf,
     container_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SandboxNetworkMode {
+    DefaultBridge,
+    Host,
+    CustomDns,
+}
+
+impl SandboxNetworkMode {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::DefaultBridge => "default-bridge",
+            Self::Host => "host",
+            Self::CustomDns => "custom-dns",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SandboxNetworkSettings {
+    mode: SandboxNetworkMode,
+    dns_servers: Vec<IpAddr>,
 }
 
 pub fn plan_agent_flow_test(
@@ -354,6 +393,35 @@ fn run_sandbox_container(
     container_name: Option<&str>,
     keep_sandbox: bool,
 ) -> Result<()> {
+    let network_settings = resolve_sandbox_network_settings(plan.mode)?;
+    run_sandbox_container_with_network_settings(
+        shell,
+        image,
+        repo_root,
+        git_dir,
+        common_git_dir,
+        artifacts_dir,
+        ai_teamlead_binary,
+        plan,
+        container_name,
+        keep_sandbox,
+        &network_settings,
+    )
+}
+
+fn run_sandbox_container_with_network_settings(
+    shell: &dyn Shell,
+    image: &str,
+    repo_root: &Path,
+    git_dir: &Path,
+    common_git_dir: &Path,
+    artifacts_dir: &Path,
+    ai_teamlead_binary: &Path,
+    plan: &AgentFlowTestPlan,
+    container_name: Option<&str>,
+    keep_sandbox: bool,
+    network_settings: &SandboxNetworkSettings,
+) -> Result<()> {
     let repo_mount = format!("{}:/input/repo:ro", repo_root.display());
     let git_dir_mount = format!("{}:/input/worktree-git:ro", git_dir.display());
     let common_git_dir_mount = format!("{}:/input/common-git:ro", common_git_dir.display());
@@ -382,6 +450,7 @@ fn run_sandbox_container(
         &container_binary_path,
         container_agent_binary_path.as_deref(),
         container_home,
+        network_settings,
     )?;
 
     let mut args = vec!["run".to_string()];
@@ -391,6 +460,23 @@ fn run_sandbox_container(
     if let Some(container_name) = container_name {
         args.push("--name".to_string());
         args.push(container_name.to_string());
+    }
+    if let Some(container_user) = resolve_sandbox_container_user(plan.mode, repo_root)? {
+        args.push("--user".to_string());
+        args.push(container_user);
+    }
+    match network_settings.mode {
+        SandboxNetworkMode::DefaultBridge => {}
+        SandboxNetworkMode::Host => {
+            args.push("--network".to_string());
+            args.push("host".to_string());
+        }
+        SandboxNetworkMode::CustomDns => {
+            for dns_server in &network_settings.dns_servers {
+                args.push("--dns".to_string());
+                args.push(dns_server.to_string());
+            }
+        }
     }
     args.push("-v".to_string());
     args.push(repo_mount);
@@ -430,6 +516,107 @@ fn run_sandbox_container(
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     shell.run(repo_root, "docker", &arg_refs)?;
     Ok(())
+}
+
+fn resolve_sandbox_container_user(mode: AgentFlowMode, repo_root: &Path) -> Result<Option<String>> {
+    if mode != AgentFlowMode::Live {
+        return Ok(None);
+    }
+
+    #[cfg(unix)]
+    {
+        let metadata = fs::metadata(repo_root)
+            .with_context(|| format!("failed to read metadata for {}", repo_root.display()))?;
+        return Ok(Some(format!("{}:{}", metadata.uid(), metadata.gid())));
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = repo_root;
+        Ok(None)
+    }
+}
+
+fn resolve_sandbox_network_settings(mode: AgentFlowMode) -> Result<SandboxNetworkSettings> {
+    if mode != AgentFlowMode::Live {
+        return Ok(SandboxNetworkSettings {
+            mode: SandboxNetworkMode::DefaultBridge,
+            dns_servers: Vec::new(),
+        });
+    }
+
+    let dns_servers = read_host_dns_servers()?;
+    Ok(resolve_sandbox_network_settings_from_dns(
+        mode,
+        &dns_servers,
+    ))
+}
+
+fn resolve_sandbox_network_settings_from_dns(
+    mode: AgentFlowMode,
+    dns_servers: &[IpAddr],
+) -> SandboxNetworkSettings {
+    if mode != AgentFlowMode::Live || dns_servers.is_empty() {
+        return SandboxNetworkSettings {
+            mode: SandboxNetworkMode::DefaultBridge,
+            dns_servers: Vec::new(),
+        };
+    }
+
+    if dns_servers.iter().any(IpAddr::is_loopback) {
+        return SandboxNetworkSettings {
+            mode: SandboxNetworkMode::Host,
+            dns_servers: dns_servers.to_vec(),
+        };
+    }
+
+    SandboxNetworkSettings {
+        mode: SandboxNetworkMode::CustomDns,
+        dns_servers: dns_servers.to_vec(),
+    }
+}
+
+fn read_host_dns_servers() -> Result<Vec<IpAddr>> {
+    let candidates = [
+        Path::new("/run/systemd/resolve/resolv.conf"),
+        Path::new("/etc/resolv.conf"),
+    ];
+    for candidate in candidates {
+        if candidate.is_file() {
+            let content = fs::read_to_string(candidate)
+                .with_context(|| format!("failed to read {}", candidate.display()))?;
+            let dns_servers = parse_resolv_nameservers(&content);
+            if !dns_servers.is_empty() {
+                return Ok(dns_servers);
+            }
+        }
+    }
+
+    Ok(Vec::new())
+}
+
+fn parse_resolv_nameservers(content: &str) -> Vec<IpAddr> {
+    let mut dns_servers = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let mut parts = trimmed.split_whitespace();
+        if parts.next() != Some("nameserver") {
+            continue;
+        }
+        let Some(value) = parts.next() else {
+            continue;
+        };
+        let Ok(address) = value.parse::<IpAddr>() else {
+            continue;
+        };
+        if !dns_servers.contains(&address) {
+            dns_servers.push(address);
+        }
+    }
+    dns_servers
 }
 
 fn read_pinned_zellij_release(repo_root: &Path) -> Result<(String, String)> {
@@ -693,6 +880,7 @@ fn sandbox_entrypoint_script(
     container_binary_path: &str,
     container_agent_binary_path: Option<&str>,
     container_home_dir: &str,
+    network_settings: &SandboxNetworkSettings,
 ) -> Result<String> {
     let mut script = String::from(
         r#"set -euo pipefail
@@ -721,7 +909,7 @@ mkdir -p "$HOME"
         }
         AgentFlowAgent::Claude => {
             script.push_str(
-                "if [[ -d /input/live-home/.claude && ! -e \"$HOME/.claude\" ]]; then cp -a /input/live-home/.claude \"$HOME/.claude\"; fi\n",
+                "if [[ -d /input/live-home/.claude ]]; then mkdir -p \"$HOME/.claude\"; for file in .credentials.json .claude.json settings.json settings.local.json settings-fast.json settings.json.orig; do if [[ -f \"/input/live-home/.claude/$file\" ]]; then cp -a \"/input/live-home/.claude/$file\" \"$HOME/.claude/$file\"; fi; done; fi\n",
             );
             script.push_str(
                 "if [[ -d /input/live-home/.config/claude && ! -e \"$HOME/.config/claude\" ]]; then mkdir -p \"$HOME/.config\" && cp -a /input/live-home/.config/claude \"$HOME/.config/claude\"; fi\n",
@@ -797,12 +985,21 @@ printf 'docker\n' > /artifacts/sandbox-runtime.txt
             mounts.join(",")
         }
     };
+    let dns_servers = if network_settings.dns_servers.is_empty() {
+        "-".to_string()
+    } else {
+        network_settings
+            .dns_servers
+            .iter()
+            .map(IpAddr::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    };
 
     script.push_str("mkdir -p \"$STUB_OUT_DIR\"\n");
     script.push_str("cat > \"$WORKSPACE_BIN/gh\" <<'EOF'\n");
     script.push_str(&gh_stub_script());
     script.push_str("EOF\nchmod +x \"$WORKSPACE_BIN/gh\"\n");
-    script.push_str("ln -sf \"$WORKSPACE_BIN/gh\" /usr/local/bin/gh\n");
     script.push_str("export AI_TEAMLEAD_TEST_GH_LOG=\"/artifacts/gh.log\"\n");
     let _ = writeln!(
         script,
@@ -839,6 +1036,25 @@ printf 'docker\n' > /artifacts/sandbox-runtime.txt
         "printf '%s\\n' {} > /artifacts/forwarded-mounts.txt",
         shell_single_quote(&forwarded_mounts)
     );
+    let _ = writeln!(
+        script,
+        "printf '%s\\n' {} > /artifacts/network-mode.txt",
+        shell_single_quote(network_settings.mode.as_str())
+    );
+    let _ = writeln!(
+        script,
+        "printf '%s\\n' {} > /artifacts/host-dns-servers.txt",
+        shell_single_quote(&dns_servers)
+    );
+    script.push_str("cat /etc/resolv.conf > /artifacts/container-resolv.conf\n");
+    script.push_str(
+        "env | grep -E '^(HTTP|HTTPS|ALL|NO)_PROXY=|^(http|https|all|no)_proxy=|^SSL_CERT_FILE=|^SSL_CERT_DIR=|^NODE_EXTRA_CA_CERTS=' | sort > /artifacts/network-env.txt || true\n",
+    );
+    let _ = writeln!(
+        script,
+        "export AI_TEAMLEAD_AGENT_KIND={}",
+        shell_single_quote(plan.agent.as_str())
+    );
 
     match (plan.mode, plan.agent) {
         (AgentFlowMode::Stub, AgentFlowAgent::Stub) => {
@@ -847,8 +1063,6 @@ printf 'docker\n' > /artifacts/sandbox-runtime.txt
             script.push_str(
                 "EOF\nchmod +x \"$WORKSPACE_BIN/codex\"\nln -sf codex \"$WORKSPACE_BIN/claude\"\n",
             );
-            script.push_str("ln -sf \"$WORKSPACE_BIN/codex\" /usr/local/bin/codex\n");
-            script.push_str("ln -sf \"$WORKSPACE_BIN/claude\" /usr/local/bin/claude\n");
             script.push_str("export AI_TEAMLEAD_AGENT_BIN=\"$WORKSPACE_BIN/codex\"\n");
             script.push_str("export AI_TEAMLEAD_STUB_OUT_DIR=\"$STUB_OUT_DIR\"\n");
             script.push_str(
@@ -868,11 +1082,6 @@ printf 'docker\n' > /artifacts/sandbox-runtime.txt
                 script,
                 "ln -sf {} \"$WORKSPACE_BIN/{}\"",
                 shell_single_quote(container_agent_binary_path),
-                live_binary_name
-            );
-            let _ = writeln!(
-                script,
-                "ln -sf \"$WORKSPACE_BIN/{0}\" \"/usr/local/bin/{0}\"",
                 live_binary_name
             );
             let _ = writeln!(
@@ -1082,12 +1291,23 @@ fn run_preflight_with_host(
     };
 
     let mut forwarded_env_vars = Vec::new();
+    let mut auth_env_vars = Vec::new();
     let mut mounted_paths = Vec::new();
     let auth_path = match agent {
         AgentFlowAgent::Stub => AuthPath::NotRequired,
         AgentFlowAgent::Codex | AgentFlowAgent::Claude => {
             for env_name in spec.auth_env_vars {
                 if env_lookup(env_name).is_some() {
+                    auth_env_vars.push((*env_name).to_string());
+                }
+            }
+
+            forwarded_env_vars.extend(auth_env_vars.iter().cloned());
+
+            for env_name in FORWARDED_RUNTIME_ENV_VARS {
+                if env_lookup(env_name).is_some()
+                    && !forwarded_env_vars.iter().any(|present| present == env_name)
+                {
                     forwarded_env_vars.push((*env_name).to_string());
                 }
             }
@@ -1099,7 +1319,7 @@ fn run_preflight_with_host(
                 }
             }
 
-            if !forwarded_env_vars.is_empty() {
+            if !auth_env_vars.is_empty() {
                 AuthPath::ApiKey
             } else if !mounted_paths.is_empty() {
                 AuthPath::SubscriptionAccount
@@ -1814,11 +2034,172 @@ commands:
     }
 
     #[test]
+    fn sandbox_run_for_live_claude_uses_agent_profile_and_mounts() {
+        let temp = tempdir().expect("tempdir");
+        let artifacts = temp.path().join("artifacts");
+        let git_dir = temp.path().join("git");
+        let common_git_dir = temp.path().join("common-git");
+        let fake_binary = temp.path().join("ai-teamlead");
+        let install_root = temp.path().join("node-install");
+        let agent_bin_dir = install_root.join("bin");
+        let agent_lib_dir = install_root.join("lib/node_modules/@anthropic-ai/claude/bin");
+        let agent_binary = agent_bin_dir.join("claude");
+        let claude_home = temp.path().join(".claude");
+        let claude_config = temp.path().join(".config/claude");
+        fs::create_dir_all(&agent_bin_dir).expect("agent bin dir");
+        fs::create_dir_all(&agent_lib_dir).expect("agent lib dir");
+        fs::create_dir_all(&claude_home).expect("claude home");
+        fs::create_dir_all(&claude_config).expect("claude config");
+        fs::write(&fake_binary, "#!/usr/bin/env bash\n").expect("binary");
+        fs::write(
+            agent_lib_dir.join("claude.js"),
+            "#!/usr/bin/env node\nconsole.log('claude');\n",
+        )
+        .expect("agent binary target");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(
+            "../lib/node_modules/@anthropic-ai/claude/bin/claude.js",
+            &agent_binary,
+        )
+        .expect("agent binary symlink");
+        #[cfg(not(unix))]
+        fs::write(&agent_binary, "#!/usr/bin/env bash\n").expect("agent binary");
+        let shell = RecordingShell::default();
+        let plan = AgentFlowTestPlan {
+            run_id: "run-id".into(),
+            manifest_path: temp.path().join("scenario.yml"),
+            manifest: ScenarioManifest {
+                name: "live-claude".into(),
+                description: None,
+                mode: Some(AgentFlowMode::Live),
+                agent: Some(AgentFlowAgent::Claude),
+                fixtures: serde_yaml::from_str("github_stub: basic.json").expect("fixtures"),
+                commands: vec!["ai-teamlead run 42".into()],
+                assertions: vec![],
+            },
+            agent: AgentFlowAgent::Claude,
+            mode: AgentFlowMode::Live,
+            keep_sandbox: false,
+            artifacts_dir: artifacts.clone(),
+            timeout_seconds: 30,
+            no_build: true,
+            preflight: PreflightSummary {
+                binary_name: Some("claude".into()),
+                binary_path: Some(agent_binary.clone()),
+                forwarded_env_vars: vec!["ANTHROPIC_API_KEY".into()],
+                mounted_paths: vec![claude_home.clone(), claude_config.clone()],
+                auth_path: AuthPath::ApiKey,
+            },
+        };
+        let network_settings = SandboxNetworkSettings {
+            mode: SandboxNetworkMode::Host,
+            dns_servers: vec!["127.0.0.1".parse().expect("dns")],
+        };
+
+        run_sandbox_container_with_network_settings(
+            &shell,
+            DEFAULT_SANDBOX_IMAGE,
+            temp.path(),
+            &git_dir,
+            &common_git_dir,
+            &artifacts,
+            &fake_binary,
+            &plan,
+            None,
+            false,
+            &network_settings,
+        )
+        .expect("sandbox");
+
+        let command = shell.commands().last().cloned().expect("command");
+        assert!(command.contains("--network host"));
+        assert!(command.contains(&format!(
+            "-v {}:/input/live-home/.claude:ro",
+            claude_home.display()
+        )));
+        assert!(command.contains(&format!(
+            "-v {}:/input/live-home/.config/claude:ro",
+            claude_config.display()
+        )));
+        assert!(command.contains("-e ANTHROPIC_API_KEY"));
+    }
+
+    #[test]
     fn maps_codex_subscription_mount_to_container_home() {
         let mapped =
             map_container_mount_path(AgentFlowAgent::Codex, Path::new("/home/test/.codex"))
                 .expect("mount");
         assert_eq!(mapped, "/input/live-home/.codex");
+    }
+
+    #[test]
+    fn maps_claude_subscription_mounts_to_container_home() {
+        let claude_home =
+            map_container_mount_path(AgentFlowAgent::Claude, Path::new("/home/test/.claude"))
+                .expect("mount");
+        assert_eq!(claude_home, "/input/live-home/.claude");
+
+        let claude_config = map_container_mount_path(
+            AgentFlowAgent::Claude,
+            Path::new("/home/test/.config/claude"),
+        )
+        .expect("mount");
+        assert_eq!(claude_config, "/input/live-home/.config/claude");
+    }
+
+    #[test]
+    fn live_network_uses_host_mode_for_loopback_dns() {
+        let settings = resolve_sandbox_network_settings_from_dns(
+            AgentFlowMode::Live,
+            &["127.0.0.1".parse().expect("dns")],
+        );
+        assert_eq!(settings.mode, SandboxNetworkMode::Host);
+    }
+
+    #[test]
+    fn live_network_uses_custom_dns_for_non_loopback_resolvers() {
+        let settings = resolve_sandbox_network_settings_from_dns(
+            AgentFlowMode::Live,
+            &[
+                "1.1.1.1".parse().expect("dns"),
+                "8.8.8.8".parse().expect("dns"),
+            ],
+        );
+        assert_eq!(settings.mode, SandboxNetworkMode::CustomDns);
+        assert_eq!(settings.dns_servers.len(), 2);
+    }
+
+    #[test]
+    fn preflight_forwards_runtime_network_envs_without_affecting_auth_path() {
+        let home = tempdir().expect("tempdir");
+        fs::create_dir_all(home.path().join(".codex")).expect("codex home");
+        let path_dir = tempdir().expect("pathdir");
+        let binary = path_dir.path().join("codex");
+        fs::write(&binary, "#!/usr/bin/env bash\n").expect("binary");
+        let mut perms = fs::metadata(&binary).expect("metadata").permissions();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o755);
+            fs::set_permissions(&binary, perms).expect("chmod");
+        }
+        let path_var = env::join_paths([path_dir.path()]).expect("path");
+        let env_lookup = |name: &str| match name {
+            "HTTP_PROXY" => Some(OsString::from("http://127.0.0.1:8080")),
+            _ => None,
+        };
+
+        let summary = run_preflight_with_host(
+            AgentFlowAgent::Codex,
+            AgentFlowMode::Live,
+            home.path(),
+            Some(path_var.as_os_str()),
+            &env_lookup,
+        )
+        .expect("preflight");
+
+        assert_eq!(summary.auth_path, AuthPath::SubscriptionAccount);
+        assert!(summary.forwarded_env_vars.iter().any(|name| name == "HTTP_PROXY"));
     }
 
     #[test]
