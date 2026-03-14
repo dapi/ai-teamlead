@@ -484,14 +484,18 @@ fn run_internal_launch_zellij_fixture(shell: &dyn Shell, issue_number: u64) -> R
 
 fn run_internal_render_launch_agent_context(shell: &dyn Shell, issue_ref: &str) -> Result<()> {
     let context = load_execution_context(shell, None)?;
+    let github = GhProjectClient::new(shell);
     let issue_number = parse_issue_ref(issue_ref)
         .with_context(|| format!("failed to parse issue reference: {issue_ref}"))?;
-    let rendered = render_launch_agent_context(&context, issue_number)?;
+    let rendered = render_launch_agent_context(&context, &github, issue_number)?;
 
     println!(
         "ISSUE_NUMBER={}",
         shell_quote(&rendered.issue_number.to_string())
     );
+    println!("ISSUE_TITLE={}", shell_quote(&rendered.issue_title));
+    println!("ISSUE_BODY={}", shell_quote(&rendered.issue_body));
+    println!("ISSUE_URL={}", shell_quote(&rendered.issue_url));
     println!("REPO={}", shell_quote(&rendered.repo_name));
     println!("BRANCH={}", shell_quote(&rendered.analysis_branch));
     println!("WORKTREE_ROOT={}", shell_quote(&rendered.worktree_root));
@@ -560,6 +564,9 @@ fn resolve_zellij_session_name(
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LaunchAgentContext {
     issue_number: u64,
+    issue_title: String,
+    issue_body: String,
+    issue_url: String,
     repo_name: String,
     analysis_branch: String,
     worktree_root: String,
@@ -568,11 +575,18 @@ struct LaunchAgentContext {
 
 fn render_launch_agent_context(
     context: &ExecutionContext,
+    github: &GhProjectClient<'_>,
     issue_number: u64,
 ) -> Result<LaunchAgentContext> {
     let repo_name = context.repo.github_repo.clone();
     let home = std::env::var("HOME").context("HOME is not set")?;
     let issue_number_str = issue_number.to_string();
+    let issue = github.load_issue_details(
+        &context.repo.repo_root,
+        &context.repo.github_owner,
+        &context.repo.github_repo,
+        issue_number,
+    )?;
 
     let analysis_branch = render_template(
         &context.config.launch_agent.analysis_branch_template,
@@ -603,6 +617,9 @@ fn render_launch_agent_context(
 
     Ok(LaunchAgentContext {
         issue_number,
+        issue_title: issue.title,
+        issue_body: issue.body,
+        issue_url: issue.url,
         repo_name,
         analysis_branch,
         worktree_root,
@@ -670,6 +687,9 @@ mod launch_agent_tests {
 
         let context = LaunchAgentContext {
             issue_number: 42,
+            issue_title: "Issue title".into(),
+            issue_body: "Issue body".into(),
+            issue_url: "https://github.com/dapi/teamlead/issues/42".into(),
             repo_name: "teamlead".into(),
             analysis_branch: branch,
             worktree_root: worktree,

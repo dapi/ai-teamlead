@@ -144,6 +144,11 @@ start_agent() {
     prompt="$(cat "$FLOW_PATH")
 
 Issue URL: $ISSUE_URL
+Issue Title: $ISSUE_TITLE
+
+Issue Body:
+$ISSUE_BODY
+
 Session UUID: $SESSION_UUID
 Analysis branch: $BRANCH
 Analysis artifacts dir: $ANALYSIS_ARTIFACTS_DIR"
@@ -156,13 +161,13 @@ Analysis artifacts dir: $ANALYSIS_ARTIFACTS_DIR"
                 exec "$agent_bin" --permission-mode bypassPermissions "$prompt"
                 ;;
             *)
-                exec "$agent_bin" --cd "$WORKTREE_ROOT" --no-alt-screen "$prompt"
+                exec "$agent_bin" exec --cd "$WORKTREE_ROOT" "$prompt"
                 ;;
         esac
     fi
 
     if command -v codex >/dev/null 2>&1; then
-        exec codex --cd "$WORKTREE_ROOT" --no-alt-screen "$prompt"
+        exec codex exec --cd "$WORKTREE_ROOT" "$prompt"
     fi
 
     if command -v claude >/dev/null 2>&1; then

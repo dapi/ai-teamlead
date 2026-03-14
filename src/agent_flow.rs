@@ -781,11 +781,23 @@ set -euo pipefail
 
 LOG_FILE="${AI_TEAMLEAD_TEST_GH_LOG:?}"
 SNAPSHOT_FILE="${AI_TEAMLEAD_TEST_GH_SNAPSHOT:?}"
+FIXTURES_DIR="${AI_TEAMLEAD_TEST_GH_FIXTURES_DIR:?}"
 ARGS="$*"
 printf 'gh %s\n' "$ARGS" >> "$LOG_FILE"
 
 if [[ "${1:-}" == "repo" && "${2:-}" == "view" ]]; then
     printf 'main\n'
+    exit 0
+fi
+
+if [[ "${1:-}" == "issue" && "${2:-}" == "view" ]]; then
+    issue_number="${3:-38}"
+    issue_fixture="$FIXTURES_DIR/issue-${issue_number}.json"
+    if [[ -f "$issue_fixture" ]]; then
+        cat "$issue_fixture"
+    else
+        printf '{"number":%s,"title":"Issue %s","body":"","url":"https://github.com/dapi/ai-teamlead/issues/%s"}\n' "$issue_number" "$issue_number" "$issue_number"
+    fi
     exit 0
 fi
 
@@ -1007,6 +1019,9 @@ printf 'docker\n' > /artifacts/sandbox-runtime.txt
         script,
         "export AI_TEAMLEAD_TEST_GH_SNAPSHOT=\"$WORKSPACE_ROOT/{}\"",
         fixture_relative_path
+    );
+    script.push_str(
+        "export AI_TEAMLEAD_TEST_GH_FIXTURES_DIR=\"$WORKSPACE_ROOT/.ai-teamlead/tests/agent-flow/fixtures\"\n",
     );
     let _ = writeln!(
         script,
@@ -2124,6 +2139,7 @@ commands:
         assert!(command.contains("-e OPENAI_API_KEY"));
         assert!(command.contains("[projects.\"$HOME\"]"));
         assert!(command.contains("[projects.\"$WORKSPACE_ROOT\"]"));
+        assert!(command.contains("AI_TEAMLEAD_TEST_GH_FIXTURES_DIR"));
         assert!(command.contains("/artifacts/current-session.json"));
         assert!(command.contains("/artifacts/current-launch-log-tail.txt"));
         assert!(command.contains("runtime_started"));

@@ -161,6 +161,46 @@ impl<'a> GhProjectClient<'a> {
         )?;
         Ok(())
     }
+
+    pub fn load_issue_details(
+        &self,
+        cwd: &Path,
+        owner: &str,
+        repo: &str,
+        issue_number: u64,
+    ) -> Result<IssueDetails> {
+        let stdout = self.shell.run(
+            cwd,
+            "gh",
+            &[
+                "issue",
+                "view",
+                &issue_number.to_string(),
+                "--repo",
+                &format!("{owner}/{repo}"),
+                "--json",
+                "number,title,body,url",
+            ],
+        )?;
+
+        let response: IssueViewResponse =
+            serde_json::from_str(&stdout).context("failed to parse issue details response")?;
+
+        Ok(IssueDetails {
+            number: response.number,
+            title: response.title,
+            body: response.body,
+            url: response.url,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssueDetails {
+    pub number: u64,
+    pub title: String,
+    pub body: String,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -264,6 +304,14 @@ struct ProjectIssueRepository {
 #[derive(Debug, Deserialize)]
 struct ProjectIssueOwner {
     login: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct IssueViewResponse {
+    number: u64,
+    title: String,
+    body: String,
+    url: String,
 }
 
 #[cfg(test)]
@@ -397,5 +445,23 @@ mod tests {
             .option_id_by_name("Backlog")
             .expect_err("missing option should fail");
         assert!(error.to_string().contains("Backlog"));
+    }
+
+    #[test]
+    fn loads_issue_details_from_gh_issue_view() {
+        let shell = FakeShell::default().with_response(
+            "gh issue view 38 --repo dapi/teamlead --json number,title,body,url",
+            r#"{"number":38,"title":"Issue title","body":"Issue body","url":"https://github.com/dapi/teamlead/issues/38"}"#,
+        );
+
+        let client = GhProjectClient::new(&shell);
+        let details = client
+            .load_issue_details(&PathBuf::from("/repo"), "dapi", "teamlead", 38)
+            .expect("issue details should parse");
+
+        assert_eq!(details.number, 38);
+        assert_eq!(details.title, "Issue title");
+        assert_eq!(details.body, "Issue body");
+        assert_eq!(details.url, "https://github.com/dapi/teamlead/issues/38");
     }
 }

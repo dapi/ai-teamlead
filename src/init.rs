@@ -194,7 +194,7 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::init_project_files;
+    use super::{init_project_files, LAUNCH_AGENT_TEMPLATE};
     use crate::project_files::ProjectPaths;
 
     #[test]
@@ -229,5 +229,12 @@ mod tests {
 
         let settings = std::fs::read_to_string(&paths.settings_path).expect("settings");
         assert!(settings.contains("session_name: \"${REPO}\""));
+    }
+
+    #[test]
+    fn launch_agent_template_uses_non_interactive_codex_exec() {
+        assert!(LAUNCH_AGENT_TEMPLATE.contains("exec \"$agent_bin\" exec --cd \"$WORKTREE_ROOT\" \"$prompt\""));
+        assert!(LAUNCH_AGENT_TEMPLATE.contains("exec codex exec --cd \"$WORKTREE_ROOT\" \"$prompt\""));
+        assert!(!LAUNCH_AGENT_TEMPLATE.contains("exec codex --cd \"$WORKTREE_ROOT\" --no-alt-screen \"$prompt\""));
     }
 }
