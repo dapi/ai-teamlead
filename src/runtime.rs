@@ -71,13 +71,17 @@ impl RuntimeLayout {
                 pane_id: "pending".to_string(),
             },
         };
-        let index = IssueSessionIndex {
+        let mut index = self.load_issue_index(issue_number)?.unwrap_or(IssueSessionIndex {
             issue_number,
-            bindings: IssueStageBindings::new(stage, session_uuid.clone()),
+            bindings: IssueStageBindings::default(),
             legacy_session_uuid: None,
             last_known_flow_status: flow_status.to_string(),
-            updated_at: timestamp,
-        };
+            updated_at: timestamp.clone(),
+        });
+        index.bindings.set(stage, session_uuid.clone());
+        index.legacy_session_uuid = None;
+        index.last_known_flow_status = flow_status.to_string();
+        index.updated_at = timestamp;
 
         let session_dir = self.sessions_dir.join(&session_uuid);
         fs::create_dir_all(&session_dir)
@@ -454,6 +458,63 @@ mod tests {
         assert_eq!(
             index.session_uuid_for_stage(FlowStage::Analysis),
             Some("legacy-session")
+        );
+    }
+
+    #[test]
+    fn preserves_existing_stage_bindings_when_claiming_new_stage() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let git_dir = repo_root.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("git dir");
+
+        let layout = RuntimeLayout::from_repo_root(&repo_root);
+        layout.ensure_exists().expect("runtime layout");
+
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir,
+            github_owner: "dapi".into(),
+            github_repo: "teamlead".into(),
+        };
+        let zellij = ZellijConfig {
+            session_name: "ai-teamlead".into(),
+            tab_name: "issue-analysis".into(),
+            layout: None,
+        };
+
+        let analysis = layout
+            .create_claim_binding(
+                &repo,
+                "PVT_project",
+                &zellij,
+                42,
+                FlowStage::Analysis,
+                "Analysis In Progress",
+            )
+            .expect("analysis claim binding");
+        let implementation = layout
+            .create_claim_binding(
+                &repo,
+                "PVT_project",
+                &zellij,
+                42,
+                FlowStage::Implementation,
+                "Implementation In Progress",
+            )
+            .expect("implementation claim binding");
+
+        let index = layout
+            .load_issue_index(42)
+            .expect("load")
+            .expect("index exists");
+        assert_eq!(
+            index.session_uuid_for_stage(FlowStage::Analysis),
+            Some(analysis.session_uuid.as_str())
+        );
+        assert_eq!(
+            index.session_uuid_for_stage(FlowStage::Implementation),
+            Some(implementation.session_uuid.as_str())
         );
     }
 }
