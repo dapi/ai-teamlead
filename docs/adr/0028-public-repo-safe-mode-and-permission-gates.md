@@ -24,6 +24,8 @@
 
 В `public-safe mode`:
 
+- auto-intake по умолчанию ограничивается issue, созданными оператором или
+  автором из явного allowlist;
 - high-risk filesystem actions требуют explicit approval;
 - network access к неразрешенным направлениям требует explicit approval;
 - dangerous execution и sandbox escalation требуют explicit approval;
@@ -40,11 +42,20 @@
 - публикация в GitHub или во внешние сервисы данных, которые могут включать
   локальные секреты или сырые runtime artifacts.
 
+Отдельное правило:
+
+- `owner-authored issue` рассматривается только как более безопасный intake
+  trigger;
+- comments даже внутри такой issue остаются hostile-by-default;
+- если системе нужен доверенный управляющий сигнал от оператора, он должен
+  приходить через explicit mechanism, а не через произвольный GitHub comment.
+
 ## Последствия
 
 Плюсы:
 
 - public repo support получает явный security baseline;
+- owner-only intake снижает риск автоматического запуска hostile issue;
 - становится возможным детерминированно объяснять operator-у, почему действие
   заблокировано или требует approval;
 - enforcement может быть реализован поэтапно, не ломая общий hostile-input
@@ -53,6 +64,8 @@
 Минусы:
 
 - interactive flow станет строже и местами медленнее;
+- comments требуют отдельной trust policy и не решаются одним только owner-only
+  intake;
 - потребуется отдельная диагностика причин блокировки;
 - часть текущих integration paths придется пересмотреть через allowlist model.
 
@@ -77,6 +90,13 @@ Prompt discipline важна, но она не заменяет permission model
 Для части операторских сценариев нужен управляемый path с явным human
 подтверждением, а не абсолютный запрет.
 
+### 4. Считать весь thread trusted, если issue создана владельцем
+
+Отклонено.
+
+Комментарии в public repo могут писать разные участники, поэтому owner-authored
+issue не решает риск prompt injection внутри discussion thread.
+
 ## Связанные документы
 
 - [../untrusted-input-security.md](../untrusted-input-security.md)
@@ -88,3 +108,5 @@ Prompt discipline важна, но она не заменяет permission model
 ### 2026-03-14
 
 - создан ADR о `public-safe mode` и permission gates для public repos
+- добавлен owner-only intake как дополнительный gate без trust upgrade для
+  comments

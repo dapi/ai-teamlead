@@ -102,6 +102,8 @@
 В этом режиме:
 
 - недоверенный контент разрешено читать и анализировать;
+- auto-intake по умолчанию должен ограничиваться issue, созданными самим
+  оператором или заранее разрешенным автором;
 - запрещено автоматически читать чувствительные локальные файлы вне целевого
   repo/worktree;
 - запрещено автоматически публиковать наружу данные из sensitive local boundary;
@@ -109,6 +111,30 @@
 - запрещено автоматически выполнять команды вне sandbox или с расширенным
   permission scope;
 - любые high-risk actions требуют явного human approval.
+
+Важно:
+
+- `owner-authored issue` это только intake mitigation;
+- он не превращает все обсуждение issue в trusted control plane;
+- comments в public repo остаются `untrusted input`, если нет отдельного
+  механизма доверенного операторского сигнала.
+
+## Policy для issue author и comments
+
+Для public repos допускается более строгая intake policy:
+
+- автоматически брать в работу только issue, созданные оператором;
+- или использовать явный allowlist авторов issue.
+
+Но при этом:
+
+- `issue author` и `comment author` рассматриваются независимо;
+- owner-authored issue не делает comments trusted;
+- comment, даже от доверенного автора, не может сам по себе повышать
+  filesystem, network или execution privileges;
+- если нужен управляющий сигнал от оператора, он должен передаваться через
+  agent session или другой explicit mechanism, а не через обычный GitHub
+  comment.
 
 ## Human gates
 
@@ -145,6 +171,8 @@ Human approval должен быть:
 
 - вопросы пользователю должны задаваться в агентской сессии, а не в GitHub
   comments;
+- intake policy может ограничивать auto-start только owner-authored issue, но
+  не меняет трактовку comments;
 - analysis artifacts не должны включать локальные секретные данные;
 - human gate на уточнениях и плане не заменяет security gates.
 
@@ -152,6 +180,7 @@ Human approval должен быть:
 
 - approved analysis artifacts не делают вход trusted автоматически;
 - кодинг и тесты не отменяют запрет на unsafe filesystem/network actions;
+- GitHub comments не должны использоваться как implicit operator override;
 - PR/issue publication path должен учитывать риск data exfiltration.
 
 ## Направление runtime enforcement
@@ -159,9 +188,10 @@ Human approval должен быть:
 Реализация должна двигаться в таком порядке:
 
 1. определить `repo_visibility` и `operating_mode`;
-2. маркировать действия по типу риска;
-3. перед high-risk action требовать явный approval или останавливать выполнение;
-4. логировать причину блокировки или запроса на approval без утечки секретов.
+2. применить intake policy к автору issue;
+3. маркировать действия по типу риска;
+4. перед high-risk action требовать явный approval или останавливать выполнение;
+5. логировать причину блокировки или запроса на approval без утечки секретов.
 
 ## Связанные документы
 
@@ -177,3 +207,5 @@ Human approval должен быть:
 ### 2026-03-14
 
 - создан SSOT для hostile-input model и `public-safe mode`
+- добавлена policy для `owner-authored issue` intake и hostile-by-default
+  comments

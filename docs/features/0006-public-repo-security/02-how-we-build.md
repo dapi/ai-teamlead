@@ -27,11 +27,21 @@ Security model делится на четыре слоя:
 
 - untrusted content читается только как данные для анализа, а не как источник
   команд управления runtime;
+- автоматический intake по умолчанию ограничивается issue, созданными самим
+  оператором запуска или заранее разрешенным owner/allowlist автором;
 - переход от чтения контента к опасным действиям требует явного human gate;
 - открытие внешних ссылок, network-запросы, запись вне workspace и исполнение
   команд с повышенными привилегиями не делаются автоматически;
 - если visibility репозитория не удалось определить, используется поведение
   уровня `public-safe` по умолчанию.
+
+Ограничение `owner-authored issues only` рассматривается как intake-layer, а не
+как полный trust upgrade:
+
+- оно снижает риск hostile issue intake;
+- оно не делает весь thread доверенным;
+- comments внутри owner-authored issue все равно остаются `untrusted content`,
+  если для них не существует отдельного trusted mechanism.
 
 ### 3. Permission gates
 
@@ -62,6 +72,7 @@ Security model делится на четыре слоя:
 
 - `repo_visibility`: `public`, `private`, `unknown`;
 - `operating_mode`: `standard`, `public-safe`;
+- `intake_policy`: `owner-only`, `allowlist`, `open-intake`;
 - `input_trust_class`: `trusted-control`, `semi-trusted-repo`, `untrusted`,
   `sensitive-local`;
 - `approval_state`: `not-required`, `required`, `granted`, `denied`.
@@ -71,6 +82,8 @@ Security model делится на четыре слоя:
 - `repo_visibility = public` всегда приводит к `operating_mode = public-safe`;
 - `repo_visibility = unknown` не может автоматически приводить к ослаблению
   ограничений;
+- `intake_policy = owner-only` фильтрует, какие issue можно автоматически брать
+  в работу, но не меняет trust-класс comments;
 - `input_trust_class = untrusted` не может повышать собственные привилегии;
 - `approval_state = granted` должен относиться к конкретному действию, а не ко
   всему последующему сеансу без ограничений.
@@ -83,6 +96,7 @@ Security model делится на четыре слоя:
 - launcher и agent runtime, которые читают repo-local assets;
 - GitHub integration layer через `gh`;
 - sandbox / escalation layer, через который проходят опасные действия;
+- intake filtering layer, который проверяет автора issue до старта workflow;
 - project-local prompts и инструкции, которые должны явно различать trusted и
   untrusted content.
 
@@ -93,6 +107,9 @@ Security model делится на четыре слоя:
 - shell output, test logs и generated artifacts тоже относятся к untrusted input,
   если они возникли как следствие обработки недоверенной задачи;
 - режим `public-safe` должен быть fail-closed, а не fail-open;
+- owner-authored intake policy допустима как дополнительный default gate для
+  public repos;
+- comments не становятся trusted только потому, что issue создал владелец;
 - в документации нужно отдельно различать `operator intent` и `content
   suggestion`, чтобы issue-текст не маскировался под действие пользователя.
 
@@ -102,6 +119,8 @@ Security model делится на четыре слоя:
 feature предполагает как минимум такие настраиваемые слои:
 
 - включение или принудительное переопределение `public-safe` режима;
+- intake policy для автоматического отбора issue;
+- allowlist авторов, которым разрешен auto-intake;
 - allowlist для допустимых network destinations;
 - policy для filesystem scope;
 - список действий, которые всегда требуют явного human approval.
