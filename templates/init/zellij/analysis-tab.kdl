@@ -3,5 +3,8 @@ layout {
     pane command="bash" {
       args "${PANE_ENTRYPOINT}"
     }
+    pane size=1 borderless=true {
+      plugin location="compact-bar"
+    }
   }
 }

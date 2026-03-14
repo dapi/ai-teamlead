@@ -239,9 +239,11 @@ mod tests {
 
         let settings = std::fs::read_to_string(&paths.settings_path).expect("settings");
         assert!(settings.contains("session_name: \"${REPO}\""));
+        assert!(settings.contains("layout: \"compact\""));
         let analysis_tab = std::fs::read_to_string(&paths.analysis_tab_template_path)
             .expect("analysis tab template");
         assert!(analysis_tab.contains("${TAB_NAME}"));
         assert!(analysis_tab.contains("${PANE_ENTRYPOINT}"));
+        assert!(analysis_tab.contains("plugin location=\"compact-bar\""));
     }
 }

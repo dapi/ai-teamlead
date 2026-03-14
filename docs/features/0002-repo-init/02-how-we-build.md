@@ -99,8 +99,11 @@
   донастройки
 - `zellij.session_name` bootstrap-ится как template `${REPO}`
 - `zellij.tab_name` по умолчанию равно `issue-analysis`
+- `zellij.layout` bootstrap-ится как `compact`, чтобы новая session по
+  умолчанию поднималась в привычном built-in layout без bare technical tab
 - `./.ai-teamlead/zellij/analysis-tab.kdl` bootstrap-ится как versioned template
-  для analysis tab с placeholders `${TAB_NAME}` и `${PANE_ENTRYPOINT}`
+  для analysis tab с placeholders `${TAB_NAME}` и `${PANE_ENTRYPOINT}` и
+  встроенным `compact-bar` как bootstrap default для tab-level UX
 - `launch_agent.analysis_branch_template` по умолчанию равно
   `analysis/issue-${ISSUE_NUMBER}`
 - `launch_agent.worktree_root_template` по умолчанию равно
@@ -114,8 +117,10 @@
    id
 2. при необходимости скорректировать literal или template
    `zellij.session_name`
-3. при необходимости скорректировать `launch_agent.*` templates
-4. только после этого запускать `poll` или `run`
+3. при необходимости скорректировать `zellij.layout` и
+   `./.ai-teamlead/zellij/analysis-tab.kdl` под собственный tab-level UX
+4. при необходимости скорректировать `launch_agent.*` templates
+5. только после этого запускать `poll` или `run`
 
 Если placeholder не заменен или id невалиден, текущая реализация не проходит
 этап загрузки project snapshot и завершает `poll`/`run` ошибкой.

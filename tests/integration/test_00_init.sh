@@ -78,6 +78,22 @@ else
     ((FAIL++)) || true
 fi
 
+if grep -Fq 'layout: "compact"' "$SETTINGS_FILE"; then
+    echo "  PASS: init bootstraps zellij.layout as compact"
+    ((PASS++)) || true
+else
+    echo "  FAIL: init bootstraps zellij.layout as compact"
+    ((FAIL++)) || true
+fi
+
+if grep -Fq 'plugin location="compact-bar"' "$ANALYSIS_TAB_TEMPLATE_FILE"; then
+    echo "  PASS: init bootstraps analysis tab with compact-bar"
+    ((PASS++)) || true
+else
+    echo "  FAIL: init bootstraps analysis tab with compact-bar"
+    ((FAIL++)) || true
+fi
+
 NO_GIT_DIR="$(mktemp -d /tmp/ai-teamlead-init-no-git-XXXXXX)"
 NO_GIT_OUTPUT_FILE="$(mktemp /tmp/ai-teamlead-init-no-git-output-XXXXXX)"
 

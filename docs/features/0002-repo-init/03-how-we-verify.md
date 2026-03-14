@@ -16,6 +16,9 @@
 - `init` создает `./.claude/README.md`
 - `init` создает `./.codex/README.md`
 - `init` создает `settings.yml` с bootstrap templates для analysis workspace
+- `init` bootstrap-ит `zellij.layout` как `compact`
+- `init` bootstrap-ит `analysis-tab.kdl` с `compact-bar` и обязательными
+  placeholders `${TAB_NAME}` и `${PANE_ENTRYPOINT}`
 - если `./init.sh` отсутствует, `init` создает симлинк на
   `./.ai-teamlead/init.sh`
 - bootstrapped `./.ai-teamlead/init.sh` копирует отсутствующие `.env*` из
