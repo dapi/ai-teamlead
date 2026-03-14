@@ -19,6 +19,8 @@ flow end-to-end.
   `codex`
 - с использованием тех же host-level настроек, credentials и параметров
   подключения к LLM, с которыми запущен сам test suite, через явный allowlist
+- с поддержкой host-level account/session auth для `claude` / `codex` по
+  подписке, а не только через отдельные LLM API credentials
 - с обязательным `gh` stub внутри sandbox вместо доступа к реальному GitHub
 
 ## Что строим

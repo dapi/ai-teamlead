@@ -11,9 +11,9 @@
    Подготавливает disposable Docker sandbox с pinned `zellij`, нужными CLI и
    временным workspace snapshot.
 3. `agent bridge`
-   Передает в sandbox только разрешенные host env vars, credentials и
-   config-files для выбранного agent profile, используя те же host-level
-   значения, с которыми запущен test suite.
+   Передает в sandbox только разрешенные host env vars, credentials,
+   config-files и account/session auth artifacts для выбранного agent profile,
+   используя те же host-level значения, с которыми запущен test suite.
 4. `scenario runner`
    Запускает внутри sandbox `ai-teamlead`, `launch-agent.sh`, `gh` stub и
    assertion hooks.
@@ -203,11 +203,19 @@ Bridge должен быть явным и profile-based.
 Примеры допустимых данных bridge:
 
 - env vars вида `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `ANTHROPIC_API_KEY`
-- user-local config dirs или files для конкретного агента
+- user-local config dirs, auth/session files или account-state files для
+  конкретного агента
 - repo-local `.claude/` и `.codex/`
 
 Bridge обязан брать значения из host environment и host config, с которыми
 запущен test suite, а не из отдельного скрытого тестового профиля.
+
+Bridge обязан поддерживать оба класса live-auth path:
+
+- API-based auth через allowlisted env vars, если агент работает через provider
+  API
+- account/session auth через allowlisted host config/session artifacts, если
+  агент работает через подписочный login самого `claude` или `codex`
 
 Недопустимо:
 
@@ -278,12 +286,19 @@ integration_tests:
         mode: live
         default: true
         model_family: sonnet
+        auth_modes:
+          - subscription_account
+          - api_key
+        preferred_auth_mode: subscription_account
         env_allowlist:
           - ANTHROPIC_API_KEY
           - ANTHROPIC_BASE_URL
         file_mounts: []
       codex:
         mode: live
+        auth_modes:
+          - subscription_account
+          - api_key
         env_allowlist:
           - OPENAI_API_KEY
           - OPENAI_BASE_URL
@@ -299,6 +314,9 @@ integration_tests:
 - без `integration_tests.agent_flow` entrypoint использует встроенные safe
   defaults
 - встроенный default live profile = `claude`
+- для `claude` и `codex` поддерживаются оба пути аутентификации:
+  `subscription_account` и `api_key`
+- для `claude` preferred auth path первой версии = `subscription_account`
 - встроенный GitHub mode = `stub`
 - secrets и значения токенов не хранятся в versioned YAML
 - в config хранятся только имена env vars, пути mounts и runtime defaults
@@ -311,8 +329,9 @@ integration_tests:
   прямой real GitHub path считается out of contract.
 - В первой версии live assertions должны проверять orchestration и артефакты, а
   не semantic quality generated текста.
-- Если agent CLI отсутствует или credentials не проброшены, сценарий должен
-  завершаться явным `preflight failed`, а не неявным timeout.
+- Если agent CLI отсутствует или нужный auth path не проброшен
+  (`subscription_account` либо `api_key`), сценарий должен завершаться явным
+  `preflight failed`, а не неявным timeout.
 
 ## Связанные документы
 

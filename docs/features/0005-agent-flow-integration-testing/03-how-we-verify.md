@@ -14,6 +14,9 @@
 - все GitHub-взаимодействия идут через `gh` stub, а не через реальный GitHub
 - agent credentials и config files попадают в sandbox только через явный
   allowlist
+- live-режим поддерживает не только API credentials, но и host-level
+  account/session auth для `claude` / `codex` по подписке, если его
+  поддерживает сам агент
 - bridge использует те же host-level credentials и параметры подключения, с
   которыми запущен сам test suite
 - forwarded secrets не сохраняются в artifact bundle и логах
@@ -41,8 +44,8 @@ Feature считается готовой, если:
 - sandbox побочные эффекты не должны писать в рабочее дерево пользователя
 - live-режим использует реальные локальные agent settings, но только через
   explicit bridge
-- explicit bridge использует именно host-level настройки и credentials
-  запущенного test suite
+- explicit bridge использует именно host-level настройки, credentials и
+  account/session auth запущенного test suite
 - GitHub API не должен быть доступен из тестового прогона напрямую
 - тестовая платформа не подменяет `launch-agent.sh` отдельным искусственным
   runner-скриптом
@@ -77,13 +80,15 @@ Feature считается готовой, если:
 - пользователь запускает локальный live-сценарий с `claude`
 - sandbox получает allowlisted настройки для `claude`
 - по умолчанию используется профиль Claude Code с моделью класса Sonnet
+- сценарий остается валидным, если доступ к модели обеспечивается через
+  подписочный account login Claude Code, а не через отдельный API key
 - orchestration path совпадает с `codex`-сценарием до точки выбора agent
   profile
 
 ### Сценарий 5. Нет credentials
 
 - выбран `live`-режим
-- нужные env vars или config mounts отсутствуют
+- отсутствуют и API credentials, и требуемый allowlisted account/session auth
 - runner завершает прогон в статусе `preflight failed`
 - пользователь видит, какого именно bridge entry не хватило
 
