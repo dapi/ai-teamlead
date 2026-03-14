@@ -1,9 +1,12 @@
 # Issue 33: zero-config шаблон `settings.yml` с canonical default-layer и guardrail
 
-Статус: draft
+Статус: approved
 Тип задачи: feature
 Размер: medium
 Последнее обновление: 2026-03-14
+Статус согласования: approved
+Approved By: dapi
+Approved At: 2026-03-14T23:06:53+03:00
 
 ## Контекст
 
@@ -26,6 +29,17 @@ Issue: `settings.yml: zero-config шаблон с закомментирован
 поля могут оставаться только в комментариях, runtime берет значения из
 canonical default-layer приложения, а эволюция схемы защищается явным
 guardrail.
+
+## Approval
+
+Пакет анализа считается approved после явного подтверждения плана в агентской
+сессии и перевода issue в `Ready for Implementation`.
+
+Для issue `#33` approval фиксируется следующими metadata:
+
+- `Статус согласования: approved`
+- `Approved By: dapi`
+- `Approved At: 2026-03-14T23:06:53+03:00`
 
 ## Артефакты
 

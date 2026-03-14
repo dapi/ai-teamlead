@@ -1,5 +1,11 @@
 # Issue 33: Как проверяем
 
+Статус: approved
+Последнее обновление: 2026-03-14
+Статус согласования: approved
+Approved By: dapi
+Approved At: 2026-03-14T23:06:53+03:00
+
 ## Acceptance Criteria
 
 1. `ai-teamlead init` по-прежнему создает `./.ai-teamlead/settings.yml`, но

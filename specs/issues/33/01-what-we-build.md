@@ -1,5 +1,11 @@
 # Issue 33: Что строим
 
+Статус: approved
+Последнее обновление: 2026-03-14
+Статус согласования: approved
+Approved By: dapi
+Approved At: 2026-03-14T23:06:53+03:00
+
 ## Problem
 
 Сейчас bootstrapped `./.ai-teamlead/settings.yml` создается как полностью
