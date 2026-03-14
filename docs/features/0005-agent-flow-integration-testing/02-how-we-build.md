@@ -15,8 +15,8 @@
    config-files для выбранного agent profile, используя те же host-level
    значения, с которыми запущен test suite.
 4. `scenario runner`
-   Запускает внутри sandbox `ai-teamlead`, `launch-agent.sh`, fake/stub
-   adapters и assertion hooks.
+   Запускает внутри sandbox `ai-teamlead`, `launch-agent.sh`, `gh` stub и
+   assertion hooks.
 5. `artifact collector`
    Выгружает наружу логи, runtime-state, stdout/stderr, metadata сценария и
    итоговый verdict.
@@ -30,8 +30,37 @@
 5. `ai-teamlead` проходит обычный launcher/orchestration path
 6. выбранный agent profile (`stub`, `claude`, `codex`) отрабатывает внутри того
    же sandbox
-7. runner выполняет assertions
-8. artifact collector сохраняет результат вне sandbox
+7. все обращения `ai-teamlead` к GitHub проходят через `gh` stub и пишутся в
+   invocation log
+8. runner выполняет assertions
+9. artifact collector сохраняет результат вне sandbox
+
+## Границы sandbox
+
+Sandbox должен быть не просто disposable container, а явно ограниченной
+execution surface.
+
+### Sandbox имеет доступ к
+
+- read/write копии workspace snapshot внутри контейнера
+- sandbox-local temporary directories и runtime-artifacts
+- read-only host mounts, перечисленным в allowlist для agent profile
+- export-каталогу артефактов, заранее выделенному runner-ом
+- outbound network только к allowlisted LLM endpoints для выбранного
+  live-profile
+- встроенному `gh` stub вместо реального `gh`
+
+### Sandbox не имеет доступа к
+
+- host `zellij` session, tab, pane и socket
+- рабочему дереву пользователя вне snapshot
+- произвольным путям в `$HOME`, не перечисленным в allowlist mounts
+- host git credentials, GitHub credentials и реальному `gh` binary
+- реальному GitHub API и GitHub web endpoints во время тестового прогона
+- произвольному outbound network вне allowlisted LLM endpoints
+
+Нарушение любой из этих границ должно считаться ошибкой конфигурации или
+`preflight failed`, а не неявным fallback.
 
 ## Данные и состояния
 
@@ -50,6 +79,8 @@
   Набор правил, как запускать `stub`, `claude` или `codex`.
 - `artifact bundle`
   Экспортируемый результат теста.
+- `gh invocation log`
+  Журнал всех вызовов `gh` stub внутри sandbox.
 
 ### Жизненный цикл `test run`
 
@@ -124,7 +155,7 @@ description: Run issue-analysis flow in isolated sandbox
 mode: stub
 agent: stub
 fixtures:
-  github_snapshot: basic-backlog.json
+  github_stub: basic-backlog.json
   repo_state: clean
 commands:
   - ai-teamlead run https://github.com/org/repo/issues/123
@@ -135,6 +166,8 @@ assertions:
     equals: Waiting for Plan Review
   - type: file_exists
     path: specs/issues/123/README.md
+  - type: gh_call
+    command: project item-edit
 ```
 
 Scenario не должен содержать secrets. Он описывает:
@@ -142,7 +175,14 @@ Scenario не должен содержать secrets. Он описывает:
 - какие fixtures нужны
 - какой agent profile используется
 - какие assertions обязательны
+- какой `gh` stub fixture и какой expected invocation log нужны
 - какой cleanup и artifact export ожидаются
+
+CLI и manifest должны валидироваться совместно:
+
+- если `--agent` или `--mode` противоречат manifest, runner завершается ошибкой
+  валидации
+- versioned manifest остается источником истины для test intent
 
 ### Agent bridge
 
@@ -170,6 +210,22 @@ Bridge обязан брать значения из host environment и host co
 - сохранять forwarded secrets в artifact bundle
 - делать implicit fallback на host filesystem вне allowlist
 
+### GitHub stub
+
+GitHub слой для integration tests должен реализовываться через собственный
+`gh` stub внутри sandbox.
+
+Требования к `gh` stub:
+
+- `PATH` внутри sandbox должен разрешать `gh` в пользу stub, а не реального CLI
+- stub получает versioned fixture из scenario manifest
+- stub логирует каждый вызов:
+  `argv`, `cwd`, время, exit code, stdout/stderr metadata
+- лог `gh` stub попадает в artifact bundle
+- assertions могут проверять как возвращенные данные, так и факт вызова
+  конкретных `gh` команд
+- обращение к реальному GitHub вместо stub считается ошибкой тестовой среды
+
 ### Stub agent
 
 `stub`-agent нужен не как отдельный shortcut, а как controlled implementation
@@ -188,6 +244,7 @@ Bridge обязан брать значения из host environment и host co
 - Live и stub режимы используют один и тот же sandbox entrypoint.
 - Default live path для локального тестирования: `claude` / Claude Code с
   моделью класса Sonnet.
+- GitHub integration в sandbox всегда проходит через `gh` stub и invocation log.
 - Вердикт сценария считается по assertions, а не по одному exit code процесса.
 - Артефакты должны собираться вне зависимости от `passed` или `failed`.
 - Sandbox должен быть disposable по умолчанию; сохранение возможно только через
@@ -208,6 +265,9 @@ integration_tests:
     default_timeout_seconds: 900
     artifacts_dir: ".git/.ai-teamlead/test-runs"
     scenario_root: ".ai-teamlead/tests/agent-flow"
+    github:
+      mode: stub
+      log_path: "logs/gh-invocations.jsonl"
     agent_profiles:
       claude:
         mode: live
@@ -234,6 +294,7 @@ integration_tests:
 - без `integration_tests.agent_flow` entrypoint использует встроенные safe
   defaults
 - встроенный default live profile = `claude`
+- встроенный GitHub mode = `stub`
 - secrets и значения токенов не хранятся в versioned YAML
 - в config хранятся только имена env vars, пути mounts и runtime defaults
 
@@ -241,6 +302,8 @@ integration_tests:
 
 - В первой версии допускается только один sandbox backend: Docker.
 - В первой версии допустим только Linux-oriented headless path.
+- В первой версии GitHub взаимодействие допустимо только через `gh` stub;
+  прямой real GitHub path считается out of contract.
 - В первой версии live assertions должны проверять orchestration и артефакты, а
   не semantic quality generated текста.
 - Если agent CLI отсутствует или credentials не проброшены, сценарий должен

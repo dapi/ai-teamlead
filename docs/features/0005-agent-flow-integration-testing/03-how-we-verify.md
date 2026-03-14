@@ -11,11 +11,13 @@
   bypass
 - `stub` и `live` режимы разделяют один и тот же orchestration path
 - default live path использует `claude` / Claude Code с моделью класса Sonnet
+- все GitHub-взаимодействия идут через `gh` stub, а не через реальный GitHub
 - agent credentials и config files попадают в sandbox только через явный
   allowlist
 - bridge использует те же host-level credentials и параметры подключения, с
   которыми запущен сам test suite
 - forwarded secrets не сохраняются в artifact bundle и логах
+- в artifact bundle сохраняется invocation log `gh` stub
 - по завершении прогона пользователь получает итоговый verdict и путь к
   артефактам
 
@@ -28,6 +30,7 @@ Feature считается готовой, если:
 - `claude` / Sonnet зафиксирован как default live path
 - `codex` поддержан как дополнительный live-profile или явно вынесен в
   follow-up
+- есть как минимум один сценарий, который проверяет invocation log `gh` stub
 - результаты можно воспроизвести повторным запуском на той же машине
 - ошибки preflight, sandbox startup и assertion failure различимы по статусу и
   диагностике
@@ -41,6 +44,7 @@ Feature считается готовой, если:
   explicit bridge
 - explicit bridge использует именно host-level настройки и credentials
   запущенного test suite
+- GitHub API не должен быть доступен из тестового прогона напрямую
 - тестовая платформа не подменяет `launch-agent.sh` отдельным искусственным
   runner-скриптом
 - любой verdict должен сопровождаться artifact bundle
@@ -52,6 +56,7 @@ Feature считается готовой, если:
 - запущен `ai-teamlead test agent-flow --scenario run-happy-path --agent stub --mode stub`
 - sandbox создается успешно
 - `ai-teamlead run` проходит обычный launcher path
+- `gh` stub получает ожидаемые вызовы и пишет invocation log
 - `stub` завершает анализ как `plan-ready`
 - assertions подтверждают, что созданы analysis artifacts и итоговый статус
   корректен
@@ -84,19 +89,25 @@ Feature считается готовой, если:
 - runner завершает прогон в статусе `preflight failed`
 - пользователь видит, какого именно bridge entry не хватило
 
-### Сценарий 6. Snapshot с локальными изменениями
+### Сценарий 6. Попытка real GitHub доступа
+
+- sandbox или процесс внутри него пытается обратиться к реальному GitHub
+- runner фиксирует нарушение sandbox policy
+- прогон завершается с явной ошибкой, а не с неявным fallback на реальный `gh`
+
+### Сценарий 7. Snapshot с локальными изменениями
 
 - в текущем working tree есть локальные изменения flow или launcher
 - snapshot включает эти изменения в sandbox
 - host repo остается неизменным после завершения теста
 
-### Сценарий 7. Падение assertions
+### Сценарий 8. Падение assertions
 
 - orchestration path завершается, но expected assertions не выполняются
 - verdict = `failed`
 - artifact bundle сохраняется для ручного разбора
 
-### Сценарий 8. Сохранение sandbox по запросу
+### Сценарий 9. Сохранение sandbox по запросу
 
 - пользователь запускает сценарий с `--keep-sandbox`
 - после завершения runner не удаляет container/filesystem
@@ -111,6 +122,7 @@ Feature считается готовой, если:
 - был ли использован `stub` или `live`
 - список forwarded env var names без значений
 - список mounted config paths
+- путь к `gh` invocation log
 - путь к workspace snapshot и artifact bundle
 - ключевые переходы состояний:
   `snapshot_prepared`, `sandbox_ready`, `runtime_started`, `agent_running`,
