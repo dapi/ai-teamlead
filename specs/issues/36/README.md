@@ -9,17 +9,17 @@
 
 ## Summary
 
-Issue добавляет в repo-local config явный opt-in контракт для global args,
-которые применяются только к конкретному агенту:
+Issue добавляет в repo-local config явный контракт для global args, которые
+применяются только к конкретному агенту:
 
 - отдельный список аргументов для `claude`
 - отдельный список аргументов для `codex`
-- пустой runtime default при отсутствии пользовательского override
+- осмысленные runtime defaults для достаточно автономного запуска
 
 Bootstrap-шаблон `templates/init/settings.yml` должен показывать оба примера в
-закомментированном виде, не превращая их в скрытый runtime default. Launcher
-должен передавать args только в ветку реально запускаемого агента и не ломать
-degraded mode fallback.
+активном default-layer и отдельно показывать более агрессивные opt-in примеры.
+Launcher должен передавать args только в ветку реально запускаемого агента и не
+ломать degraded mode fallback.
 
 ## Status
 

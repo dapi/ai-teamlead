@@ -15,7 +15,7 @@
    `start_codex`, `start_claude`, `start_degraded_shell`, чтобы каждая ветка
    применяла только свои args.
 5. Сохранить текущее поведение по умолчанию: без override дополнительные args
-   не добавляются вообще.
+   берутся из application defaults, а не из пустого списка.
 
 ## Affected Areas
 
@@ -24,7 +24,7 @@
 - `src/app.rs`
   рендер launch context и shell-safe передача per-agent arrays в launcher;
 - `templates/init/settings.yml`
-  закомментированные opt-in примеры для `claude` и `codex`;
+  активные defaults и opt-in примеры для `claude` и `codex`;
 - `templates/init/launch-agent.sh`
   branch-specific запуск агента с подстановкой args;
 - `./.ai-teamlead/launch-agent.sh`
@@ -42,8 +42,11 @@ launch_agent:
   worktree_root_template: "${HOME}/worktrees/${REPO}/${BRANCH}"
   analysis_artifacts_dir_template: "specs/issues/${ISSUE_NUMBER}"
   global_args:
-    claude: []
-    codex: []
+    claude:
+      - "--permission-mode"
+      - "auto"
+    codex:
+      - "--full-auto"
 ```
 
 Семантика:
@@ -51,8 +54,15 @@ launch_agent:
 - `launch_agent.global_args` является optional/defaulted блоком;
 - `launch_agent.global_args.claude` и `launch_agent.global_args.codex` являются
   отдельными optional/defaulted полями;
-- отсутствие блока или конкретного поля эквивалентно пустому списку;
+- отсутствие блока или конкретного поля эквивалентно application defaults;
 - каждый элемент списка должен быть непустой строкой после `trim()`.
+
+Канонические defaults:
+
+- `codex`: `["--full-auto"]`
+- `claude`: `["--permission-mode", "auto"]`
+
+Более агрессивные значения считаются opt-in overrides, а не default-layer.
 
 Почему не raw string:
 
@@ -67,11 +77,16 @@ launch_agent:
   analysis_branch_template: "analysis/issue-${ISSUE_NUMBER}"
   worktree_root_template: "${HOME}/worktrees/${REPO}/${BRANCH}"
   analysis_artifacts_dir_template: "specs/issues/${ISSUE_NUMBER}"
+  global_args:
+    claude:
+      - "--permission-mode"
+      - "auto"
+    codex:
+      - "--full-auto"
+  # opt-in example:
   # global_args:
   #   claude:
   #     - "--dangerously-skip-permissions"
-  #   codex:
-  #     - "--full-auto"
 ```
 
 Граница Rust -> shell:
@@ -98,8 +113,10 @@ template launcher-а с уже зафиксированным doc contract "`cod
 
 - новые поля являются `defaulted-by-application`, а не
   `required-without-default`;
-- `templates/init/settings.yml` показывает opt-in пример, но не активирует его
-  в generated конфиге;
+- `templates/init/settings.yml` должен показывать реальные defaults как активную
+  часть generated конфига;
+- opt-in dangerous overrides должны оставаться только примерами или явными
+  пользовательскими изменениями;
 - текущие templates branch/worktree/artifacts не меняются;
 - `render-launch-agent-context` остается единственной точкой, которая знает,
   как превратить config в shell-safe launcher context;
@@ -110,6 +127,8 @@ template launcher-а с уже зафиксированным doc contract "`cod
 
 - если args будут рендериться как одна shell-строка, появится регрессия по
   quoting и shell injection;
+- если defaults будут зафиксированы только в шаблоне, а не в Rust default-layer,
+  появится расхождение между новым bootstrap и существующими конфигами;
 - переход от `codex-only` launcher-а к `codex`/`claude` ветвлению может
   незаметно поменять degraded path, если не покрыть сценарий отсутствия обоих
   бинарников;
@@ -180,8 +199,10 @@ launcher-level настройке.
 
 - существующие `settings.yml` без `global_args` должны продолжить загружаться
   без миграции;
-- rollout считается backward-compatible, если пустой default не меняет argv
-  текущего `codex` path;
+- rollout считается обратно совместимым по схеме, но меняет runtime behavior:
+  старые конфиги без override начнут получать canonical defaults;
+- это нужно явно зафиксировать как осознанное изменение контракта относительно
+  прежней версии анализа, где default предполагался пустым;
 - тесты на `claude` path должны использовать отдельный stub и запуск без
   доступного `codex`, чтобы избежать ложноположительного прохождения;
 - dogfooding-копия `./.ai-teamlead/launch-agent.sh` должна обновляться

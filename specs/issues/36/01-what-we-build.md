@@ -9,12 +9,14 @@ config contract для дополнительных пользовательск
 
 - владелец репозитория не может versioned-способом включить глобальные флаги
   запуска для конкретного агента;
-- `templates/init/settings.yml` не показывает, как безопасно включать такие
-  расширения через opt-in;
+- `templates/init/settings.yml` не показывает, какие agent args являются
+  runtime defaults, а какие должны включаться только через opt-in;
 - правило из issue `#33` про extension-like закомментированные примеры пока не
   получает практического применения для agent launch path;
 - shell boundary остается неявным: если когда-нибудь передавать args как raw
   string, появится риск скрытого shell-splitting и плохой валидации.
+- у пользователей нет repo-level default для "достаточно автономного" запуска
+  обоих поддерживаемых агентов.
 
 Отдельно есть несоответствие между документацией и текущим bootstrap launcher:
 документы уже говорят о запуске `codex` или `claude`, но template launcher
@@ -36,10 +38,12 @@ config contract для дополнительных пользовательск
   `codex` внутри launcher-настроек;
 - значение каждого поля задается как список CLI-аргументов, а не как raw shell
   string;
-- при отсутствии пользовательского override runtime не добавляет никаких extra
-  args;
-- `templates/init/settings.yml` показывает оба примера только в
-  закомментированном виде;
+- runtime по умолчанию использует достаточно автономные, но не максимально
+  опасные значения:
+  - для `codex`: `--full-auto`
+  - для `claude`: `--permission-mode auto`
+- `templates/init/settings.yml` показывает эти defaults явно, а более
+  агрессивные режимы оставляет opt-in примерами;
 - launcher подставляет args только в ветку реально запускаемого агента;
 - fallback без доступного агента продолжает работать без скрытой регрессии.
 
@@ -48,11 +52,13 @@ config contract для дополнительных пользовательск
 В текущую задачу входит:
 
 - расширение repo-local config contract для per-agent global args;
-- явная семантика default-layer: отсутствие override означает пустой список;
+- явная семантика default-layer: отсутствие override означает application
+  defaults для разумной автономии;
 - обновление `launch-agent.sh` и bootstrap template для передачи args в
   `codex` и `claude`;
-- синхронизация `templates/init/settings.yml` с guardrail из issue `#33`;
-- тесты на пустой default, `codex` path, `claude` path и degraded fallback;
+- синхронизация `templates/init/settings.yml` с новым правилом: автономные
+  defaults активны по умолчанию, а dangerous-режимы остаются opt-in;
+- тесты на canonical defaults, `codex` path, `claude` path и degraded fallback;
 - обновление документации вокруг launcher contract и bootstrap template.
 
 ## Non-Goals
@@ -64,16 +70,19 @@ config contract для дополнительных пользовательск
 - хранение выбора агента в отдельном новом config contract;
 - изменение prompt contract или структуры `issue-analysis-flow`;
 - расширение args на другие инструменты помимо `claude` и `codex`;
-- скрытый runtime default, который активируется только потому, что пример
-  показан в шаблоне.
+- включение максимально опасных bypass-режимов по умолчанию.
 
 ## Constraints And Assumptions
 
 - формат должен быть безопасен для shell boundary, поэтому аргументы хранятся
   как список строк, а не как одна shell-строка;
-- закомментированный пример в `templates/init/settings.yml` может отличаться от
-  runtime default только как opt-in расширение и не должен менять поведение при
-  отсутствии override;
+- runtime default должен быть один и совпадать между Rust default-layer,
+  `templates/init/settings.yml` и документацией;
+- `--full-auto` для `codex` и `--permission-mode auto` для `claude`
+  рассматриваются как "достаточно автономные", но не как опасный bypass safety
+  boundary;
+- dangerous-режимы вроде `--dangerously-skip-permissions` для `claude` должны
+  оставаться явным opt-in;
 - существующие конфиги без новых полей должны оставаться валидными;
 - launcher не должен логировать значения пользовательских args как часть
   обычной диагностики, чтобы не плодить accidental secret leakage;
@@ -83,26 +92,27 @@ config contract для дополнительных пользовательск
 ## User Story
 
 Как владелец подключенного репозитория, я хочу явно включать global args для
-`claude` и `codex` в `settings.yml`, чтобы настраивать launcher behavior через
-versioned contract без скрытых runtime default и без небезопасной shell-строки.
+`claude` и `codex` в `settings.yml`, сохраняя при этом осмысленные автономные
+defaults, чтобы launcher был достаточно самостоятельным из коробки, но более
+опасные режимы я мог включать только явным opt-in через versioned contract.
 
 ## Use Cases
 
-1. Пользователь разкомментирует пример для `codex` и получает запуск
-   `codex` с `--full-auto`, при этом остальные launcher semantics не меняются.
-2. Пользователь разкомментирует пример для `claude` и получает запуск
-   `claude` с `--dangerously-skip-permissions`, если launcher идет по ветке
+1. Пользователь ничего не меняет в конфиге и получает запуск `codex` с runtime
+   default `--full-auto`, при этом остальные launcher semantics не меняются.
+2. Пользователь ничего не меняет в конфиге и получает запуск `claude` с
+   runtime default `--permission-mode auto`, если launcher идет по ветке
    `claude`.
-3. Пользователь не включает ни одно поле и получает текущее поведение без
-   extra args.
+3. Пользователь явным opt-in включает для `claude`
+   `--dangerously-skip-permissions`, если ему нужен более агрессивный режим.
 4. В окружении нет ни `codex`, ни `claude`; launcher по-прежнему оставляет
    shell в analysis worktree и не пытается интерпретировать пустые или
    отсутствующие args как команду.
 
 ## Dependencies
 
-- issue `#33` как родительский guardrail для zero-config шаблона и
-  extension-like закомментированных примеров
+- issue `#33` как родительский guardrail для единого default-layer и
+  контролируемых opt-in расширений
 - [../../../docs/features/0002-repo-init/README.md](../../../docs/features/0002-repo-init/README.md)
 - [../../../docs/features/0003-agent-launch-orchestration/README.md](../../../docs/features/0003-agent-launch-orchestration/README.md)
 - существующий headless integration runner для `zellij`-затрагивающих сценариев
