@@ -477,6 +477,7 @@ mod tests {
                 &ZellijConfig {
                     session_name: "teamlead".into(),
                     tab_name: "issue-analysis".into(),
+                    layout: None,
                 },
                 15,
             )
@@ -548,6 +549,7 @@ mod tests {
                 &ZellijConfig {
                     session_name: "teamlead".into(),
                     tab_name: "issue-analysis".into(),
+                    layout: None,
                 },
                 15,
             )
@@ -625,6 +627,7 @@ mod tests {
                 &ZellijConfig {
                     session_name: "teamlead".into(),
                     tab_name: "issue-analysis".into(),
+                    layout: None,
                 },
                 15,
             )
@@ -715,6 +718,7 @@ mod tests {
                 &ZellijConfig {
                     session_name: "teamlead".into(),
                     tab_name: "issue-analysis".into(),
+                    layout: None,
                 },
                 15,
             )

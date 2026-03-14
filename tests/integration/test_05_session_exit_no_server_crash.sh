@@ -98,7 +98,12 @@ if [[ -f "$ISSUE_INDEX" ]]; then
     SESSION_MANIFEST="$REPO_ROOT/.git/.ai-teamlead/sessions/$SESSION_UUID/session.json"
 
     if [[ -f "$LAYOUT_FILE" ]]; then
-        assert_file_contains "$LAYOUT_FILE" "close_on_exit false" "layout includes close_on_exit false for pane lifecycle"
+        if grep -Fq "close_on_exit false" "$LAYOUT_FILE"; then
+            printf 'ASSERT FAIL: layout must not force close_on_exit false\n' >&2
+            ((FAIL++)) || true
+        else
+            printf 'ASSERT OK: layout does not force close_on_exit false\n'
+        fi
     fi
     if [[ -f "$SESSION_MANIFEST" ]]; then
         assert_eq "$(jq -r '.zellij.session_name' "$SESSION_MANIFEST")" "$OUTER_SESSION" "run reused current zellij session from env"

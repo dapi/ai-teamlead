@@ -1,6 +1,9 @@
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde_json::Value;
@@ -9,6 +12,10 @@ use crate::config::ZellijConfig;
 use crate::repo::RepoContext;
 use crate::runtime::RuntimeLayout;
 use crate::shell::Shell;
+
+const ANALYSIS_TAB_TEMPLATE_PATH: &str = ".ai-teamlead/zellij/analysis-tab.kdl";
+const ANALYSIS_TAB_TEMPLATE_NAME_PLACEHOLDER: &str = "${TAB_NAME}";
+const ANALYSIS_TAB_TEMPLATE_ENTRYPOINT_PLACEHOLDER: &str = "${PANE_ENTRYPOINT}";
 
 pub struct ZellijLauncher<'a> {
     shell: &'a dyn Shell,
@@ -37,11 +44,19 @@ impl<'a> ZellijLauncher<'a> {
         let entrypoint_path = session_dir.join("pane-entrypoint.sh");
         let layout_path = session_dir.join("launch-layout.kdl");
         let launch_log_path = session_dir.join("launch.log");
+        let analysis_tab_template_path = repo_root.join(ANALYSIS_TAB_TEMPLATE_PATH);
         fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&launch_log_path)
             .with_context(|| format!("failed to create {}", launch_log_path.display()))?;
+        append_launch_log(
+            &launch_log_path,
+            &format!(
+                "analysis-tab-contract: {}",
+                analysis_tab_template_path.display()
+            ),
+        )?;
         let quoted_repo_root = shell_single_quote(repo_root.to_string_lossy().as_ref());
         let quoted_launch_agent = shell_single_quote("./.ai-teamlead/launch-agent.sh");
         let quoted_session_uuid = shell_single_quote(session_uuid);
@@ -79,11 +94,19 @@ exec {quoted_launch_agent} {quoted_session_uuid} {quoted_issue_url}\n"
             })?;
         }
 
-        let layout = format!(
-            "layout {{\n  tab name=\"{}\" {{\n    pane command=\"bash\" {{\n      args \"{}\"\n      close_on_exit false\n    }}\n  }}\n}}\n",
-            escape_kdl_string(&zellij.tab_name),
-            escape_kdl_string(entrypoint_path.to_string_lossy().as_ref()),
-        );
+        let analysis_tab_template = fs::read_to_string(&analysis_tab_template_path)
+            .with_context(|| format!("failed to read {}", analysis_tab_template_path.display()))?;
+        let layout = render_analysis_tab_layout(
+            &analysis_tab_template,
+            &zellij.tab_name,
+            entrypoint_path.to_string_lossy().as_ref(),
+        )
+        .with_context(|| {
+            format!(
+                "failed to render analysis tab contract {}",
+                analysis_tab_template_path.display()
+            )
+        })?;
         fs::write(&layout_path, layout)
             .with_context(|| format!("failed to write {}", layout_path.display()))?;
 
@@ -98,38 +121,167 @@ exec {quoted_launch_agent} {quoted_session_uuid} {quoted_issue_url}\n"
         let layout_str = layout_path.to_string_lossy();
 
         if session_exists {
+            append_launch_log(
+                &launch_log_path,
+                "launcher-path: existing session, add analysis tab",
+            )?;
             ensure_session_repo_scope(self.shell, repo_root, repo, &zellij.session_name)?;
-            // For existing sessions: use `zellij action new-tab` IPC command.
-            // Clear inherited ZELLIJ_* vars before session-scoped IPC. When
-            // ai-teamlead runs inside another zellij pane, leaking the outer
-            // ZELLIJ_PANE_ID breaks list-panes/new-tab against the target
-            // existing session on zellij 0.44.
-            run_session_scoped_zellij_action(
+            add_analysis_tab_to_existing_session(
                 self.shell,
                 repo_root,
                 &zellij.session_name,
-                &["action", "new-tab", "--layout", &layout_str],
+                &layout_str,
             )?;
             Ok(())
         } else {
-            // For new sessions: a PTY is still required for the initial attach,
-            // so we keep `script -qfc`.  Clear inherited ZELLIJ env vars via
-            // `env -u` to prevent the inner client from interfering with the
-            // outer zellij server (the likely cause of the server crash).
-            let zellij_command = format!(
-                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID zellij --session {} -n {}",
-                shell_single_quote(&zellij.session_name),
-                shell_single_quote(&layout_str)
-            );
-            self.shell.spawn_with_env(
+            let launch = if let Some(layout_name) = zellij.layout.as_deref() {
+                append_launch_log(
+                    &launch_log_path,
+                    &format!("launcher-path: custom layout '{layout_name}'"),
+                )?;
+                NewSessionLaunch::CustomLayout(layout_name)
+            } else {
+                append_launch_log(
+                    &launch_log_path,
+                    "launcher-path: default fallback session create",
+                )?;
+                NewSessionLaunch::DefaultFallback
+            };
+            spawn_new_session(
+                self.shell,
                 repo_root,
-                &[],
-                "script",
-                &["-qfc", &zellij_command, "/dev/null"],
-                Some(&launch_log_path),
+                &zellij.session_name,
+                launch,
+                &launch_log_path,
+            )?;
+            wait_for_session_creation(
+                self.shell,
+                repo_root,
+                &zellij.session_name,
+                &launch_log_path,
+            )?;
+            add_analysis_tab_with_retry(
+                self.shell,
+                repo_root,
+                &zellij.session_name,
+                &layout_str,
+                &launch_log_path,
             )
         }
     }
+}
+
+enum NewSessionLaunch<'a> {
+    CustomLayout(&'a str),
+    DefaultFallback,
+}
+
+fn spawn_new_session(
+    shell: &dyn Shell,
+    repo_root: &Path,
+    session_name: &str,
+    launch: NewSessionLaunch<'_>,
+    launch_log_path: &Path,
+) -> Result<()> {
+    let zellij_command = match launch {
+        NewSessionLaunch::CustomLayout(layout_name) => format!(
+            "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID zellij --session {} --layout {}",
+            shell_single_quote(session_name),
+            shell_single_quote(layout_name)
+        ),
+        NewSessionLaunch::DefaultFallback => format!(
+            "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID zellij --session {}",
+            shell_single_quote(session_name)
+        ),
+    };
+
+    shell.spawn_with_env(
+        repo_root,
+        &[],
+        "script",
+        &["-qfc", &zellij_command, "/dev/null"],
+        Some(launch_log_path),
+    )
+}
+
+fn wait_for_session_creation(
+    shell: &dyn Shell,
+    repo_root: &Path,
+    session_name: &str,
+    launch_log_path: &Path,
+) -> Result<()> {
+    for attempt in 1..=20 {
+        if let Ok(sessions) = shell.run(repo_root, "zellij", &["list-sessions", "--short"]) {
+            if sessions.lines().any(|line| line.trim() == session_name) {
+                append_launch_log(
+                    launch_log_path,
+                    &format!("launcher-step: session created on attempt {attempt}"),
+                )?;
+                return Ok(());
+            }
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    let launch_log_excerpt = read_launch_log_excerpt(launch_log_path);
+    Err(anyhow!(
+        "failed to create zellij session '{}'; session did not appear after spawn; launch_log_excerpt={}",
+        session_name,
+        launch_log_excerpt
+    ))
+    .context("failed at launcher step: create session")
+}
+
+fn add_analysis_tab_to_existing_session(
+    shell: &dyn Shell,
+    repo_root: &Path,
+    session_name: &str,
+    layout_path: &str,
+) -> Result<()> {
+    // For existing sessions: use `zellij action new-tab` IPC command.
+    // Clear inherited ZELLIJ_* vars before session-scoped IPC. When
+    // ai-teamlead runs inside another zellij pane, leaking the outer
+    // ZELLIJ_PANE_ID breaks list-panes/new-tab against the target
+    // existing session on zellij 0.44.
+    run_session_scoped_zellij_action(
+        shell,
+        repo_root,
+        session_name,
+        &["action", "new-tab", "--layout", layout_path],
+    )?;
+    Ok(())
+}
+
+fn add_analysis_tab_with_retry(
+    shell: &dyn Shell,
+    repo_root: &Path,
+    session_name: &str,
+    layout_path: &str,
+    launch_log_path: &Path,
+) -> Result<()> {
+    let mut last_error = None;
+    for attempt in 1..=10 {
+        match add_analysis_tab_to_existing_session(shell, repo_root, session_name, layout_path) {
+            Ok(()) => {
+                append_launch_log(
+                    launch_log_path,
+                    &format!("launcher-step: analysis tab attached on attempt {attempt}"),
+                )?;
+                return Ok(());
+            }
+            Err(error) => {
+                last_error = Some(error);
+                thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+
+    let error = last_error.expect("retry loop must capture at least one error");
+    append_launch_log(
+        launch_log_path,
+        &format!("launcher-step: failed to attach analysis tab: {error:#}"),
+    )?;
+    Err(error).context("failed at launcher step: add analysis tab")
 }
 
 fn run_session_scoped_zellij_action(
@@ -342,16 +494,71 @@ fn escape_kdl_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+fn render_analysis_tab_layout(
+    template: &str,
+    tab_name: &str,
+    pane_entrypoint: &str,
+) -> Result<String> {
+    if !template.contains(ANALYSIS_TAB_TEMPLATE_NAME_PLACEHOLDER) {
+        bail!(
+            "analysis tab template must contain {} placeholder",
+            ANALYSIS_TAB_TEMPLATE_NAME_PLACEHOLDER
+        );
+    }
+    if !template.contains(ANALYSIS_TAB_TEMPLATE_ENTRYPOINT_PLACEHOLDER) {
+        bail!(
+            "analysis tab template must contain {} placeholder",
+            ANALYSIS_TAB_TEMPLATE_ENTRYPOINT_PLACEHOLDER
+        );
+    }
+
+    Ok(template
+        .replace(
+            ANALYSIS_TAB_TEMPLATE_NAME_PLACEHOLDER,
+            &escape_kdl_string(tab_name),
+        )
+        .replace(
+            ANALYSIS_TAB_TEMPLATE_ENTRYPOINT_PLACEHOLDER,
+            &escape_kdl_string(pane_entrypoint),
+        ))
+}
+
+fn append_launch_log(path: &Path, line: &str) -> Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .with_context(|| format!("failed to open {}", path.display()))?;
+    writeln!(file, "{line}").with_context(|| format!("failed to append {}", path.display()))
+}
+
+fn read_launch_log_excerpt(path: &Path) -> String {
+    match fs::read_to_string(path) {
+        Ok(contents) => contents
+            .lines()
+            .rev()
+            .take(8)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join(" | "),
+        Err(error) => format!("<failed to read {}: {}>", path.display(), error),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, VecDeque};
     use std::path::Path;
 
     use anyhow::{Result, anyhow};
     use tempfile::tempdir;
 
-    use super::{ZellijLauncher, resolve_tab_id, resolve_tab_id_from_panes};
+    use super::{
+        ZellijLauncher, render_analysis_tab_layout, resolve_tab_id, resolve_tab_id_from_panes,
+    };
     use crate::config::ZellijConfig;
     use crate::repo::RepoContext;
     use crate::runtime::RuntimeLayout;
@@ -360,6 +567,7 @@ mod tests {
     #[derive(Default)]
     struct FakeShell {
         responses: BTreeMap<String, String>,
+        response_sequences: RefCell<BTreeMap<String, VecDeque<String>>>,
         runs: RefCell<Vec<String>>,
         spawns: RefCell<Vec<String>>,
         run_with_env_calls: RefCell<Vec<(String, Vec<(String, String)>)>>,
@@ -368,6 +576,14 @@ mod tests {
     impl FakeShell {
         fn with_response(mut self, key: &str, value: &str) -> Self {
             self.responses.insert(key.to_string(), value.to_string());
+            self
+        }
+
+        fn with_response_sequence(self, key: &str, values: &[&str]) -> Self {
+            self.response_sequences.borrow_mut().insert(
+                key.to_string(),
+                values.iter().map(|value| value.to_string()).collect(),
+            );
             self
         }
 
@@ -392,10 +608,26 @@ mod tests {
             self.runs
                 .borrow_mut()
                 .push(format!("{program} {}", args.join(" ")));
+            if let Some(value) = self
+                .response_sequences
+                .borrow_mut()
+                .get_mut(&cwd_key)
+                .and_then(VecDeque::pop_front)
+            {
+                return Ok(value);
+            }
             if let Some(value) = self.responses.get(&cwd_key) {
                 return Ok(value.clone());
             }
             let key = format!("{program} {}", args.join(" "));
+            if let Some(value) = self
+                .response_sequences
+                .borrow_mut()
+                .get_mut(&key)
+                .and_then(VecDeque::pop_front)
+            {
+                return Ok(value);
+            }
             if let Some(value) = self.responses.get(&key) {
                 return Ok(value.clone());
             }
@@ -453,6 +685,16 @@ mod tests {
         }
     }
 
+    fn write_analysis_tab_template(repo_root: &Path, template: &str) {
+        let zellij_dir = repo_root.join(".ai-teamlead/zellij");
+        std::fs::create_dir_all(&zellij_dir).expect("zellij dir");
+        std::fs::write(zellij_dir.join("analysis-tab.kdl"), template).expect("analysis tab");
+    }
+
+    fn default_analysis_tab_template() -> &'static str {
+        "layout {\n  tab name=\"${TAB_NAME}\" {\n    pane command=\"bash\" {\n      args \"${PANE_ENTRYPOINT}\"\n    }\n  }\n}\n"
+    }
+
     #[test]
     fn resolves_tab_id_from_current_tab_info() {
         let json = r#"{"name":"issue-analysis","tab_id":7}"#;
@@ -481,8 +723,14 @@ mod tests {
         let runtime = RuntimeLayout::from_repo_root(&repo_root);
         runtime.ensure_exists().expect("runtime");
 
-        let shell = FakeShell::default().with_response("zellij list-sessions --short", "");
+        let shell = FakeShell::default()
+            .with_response_sequence("zellij list-sessions --short", &["", "ai-teamlead"])
+            .with_response(
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID ZELLIJ=0 ZELLIJ_SESSION_NAME=ai-teamlead zellij action new-tab --layout",
+                "",
+            );
         let launcher = ZellijLauncher::new(&shell);
+        write_analysis_tab_template(&repo_root, default_analysis_tab_template());
         let repo = RepoContext {
             repo_root: repo_root.clone(),
             git_dir: git_dir.clone(),
@@ -492,6 +740,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            layout: None,
         };
 
         launcher
@@ -510,12 +759,23 @@ mod tests {
         let spawns = shell.spawns.borrow();
         assert_eq!(spawns.len(), 1);
         assert!(spawns[0].contains("script -qfc"));
-        assert!(spawns[0].contains("--session 'ai-teamlead' -n"));
+        assert!(spawns[0].contains("--session 'ai-teamlead'"));
+        assert!(
+            !spawns[0].contains(" -n "),
+            "default fallback must not use generated layout for session create: {}",
+            spawns[0]
+        );
         // Verify ZELLIJ env vars are cleared to prevent server crash
         assert!(
             spawns[0].contains("env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID"),
             "new session command must clear ZELLIJ env vars, got: {}",
             spawns[0]
+        );
+        let runs = shell.runs.borrow();
+        assert!(
+            runs.iter()
+                .any(|cmd| cmd.contains("zellij action new-tab --layout")),
+            "new session path must attach analysis tab after session create"
         );
         assert!(
             runtime
@@ -534,6 +794,58 @@ mod tests {
                 .session_dir("session-uuid")
                 .join("launch.log")
                 .exists()
+        );
+    }
+
+    #[test]
+    fn launcher_uses_named_layout_when_configured_for_new_session() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let git_dir = repo_root.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("git dir");
+
+        let runtime = RuntimeLayout::from_repo_root(&repo_root);
+        runtime.ensure_exists().expect("runtime");
+
+        let shell = FakeShell::default()
+            .with_response_sequence("zellij list-sessions --short", &["", "ai-teamlead"])
+            .with_response(
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID ZELLIJ=0 ZELLIJ_SESSION_NAME=ai-teamlead zellij action new-tab --layout",
+                "",
+            );
+        let launcher = ZellijLauncher::new(&shell);
+        write_analysis_tab_template(&repo_root, default_analysis_tab_template());
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir: git_dir.clone(),
+            github_owner: "dapi".into(),
+            github_repo: "teamlead".into(),
+        };
+        let zellij = ZellijConfig {
+            session_name: "ai-teamlead".into(),
+            tab_name: "issue-analysis".into(),
+            layout: Some("custom-layout".into()),
+        };
+
+        launcher
+            .launch_issue_analysis(
+                &repo,
+                &repo_root,
+                &runtime,
+                &zellij,
+                "https://github.com/dapi/teamlead/issues/42",
+                "session-uuid",
+                Path::new("/tmp/ai-teamlead"),
+                false,
+            )
+            .expect("launch should succeed");
+
+        let spawns = shell.spawns.borrow();
+        assert_eq!(spawns.len(), 1);
+        assert!(
+            spawns[0].contains("--session 'ai-teamlead' --layout 'custom-layout'"),
+            "custom layout path must create session via named layout: {}",
+            spawns[0]
         );
     }
 
@@ -574,6 +886,7 @@ mod tests {
                 "",
             );
         let launcher = ZellijLauncher::new(&shell);
+        write_analysis_tab_template(&repo_root, default_analysis_tab_template());
         let repo = RepoContext {
             repo_root: repo_root.clone(),
             git_dir: git_dir.clone(),
@@ -583,6 +896,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            layout: None,
         };
 
         launcher
@@ -661,6 +975,7 @@ mod tests {
                 "git@github.com:dapi/foreign.git",
             );
         let launcher = ZellijLauncher::new(&shell);
+        write_analysis_tab_template(&repo_root, default_analysis_tab_template());
         let repo = RepoContext {
             repo_root: repo_root.clone(),
             git_dir,
@@ -670,6 +985,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            layout: None,
         };
 
         let error = launcher
@@ -698,7 +1014,7 @@ mod tests {
     }
 
     #[test]
-    fn layout_includes_close_on_exit_false() {
+    fn layout_does_not_force_close_on_exit_false() {
         let temp = tempdir().expect("temp dir");
         let repo_root = temp.path().join("repo");
         let git_dir = repo_root.join(".git");
@@ -707,8 +1023,14 @@ mod tests {
         let runtime = RuntimeLayout::from_repo_root(&repo_root);
         runtime.ensure_exists().expect("runtime");
 
-        let shell = FakeShell::default().with_response("zellij list-sessions --short", "");
+        let shell = FakeShell::default()
+            .with_response_sequence("zellij list-sessions --short", &["", "ai-teamlead"])
+            .with_response(
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID ZELLIJ=0 ZELLIJ_SESSION_NAME=ai-teamlead zellij action new-tab --layout",
+                "",
+            );
         let launcher = ZellijLauncher::new(&shell);
+        write_analysis_tab_template(&repo_root, default_analysis_tab_template());
         let repo = RepoContext {
             repo_root: repo_root.clone(),
             git_dir: git_dir.clone(),
@@ -718,6 +1040,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            layout: None,
         };
 
         launcher
@@ -740,9 +1063,123 @@ mod tests {
         )
         .expect("layout file");
         assert!(
-            layout_content.contains("close_on_exit false"),
-            "layout must include close_on_exit false to keep pane alive after agent exits, got: {}",
+            !layout_content.contains("close_on_exit false"),
+            "layout must not force close_on_exit false; pane should use default exit behavior, got: {}",
             layout_content
         );
+    }
+
+    #[test]
+    fn launcher_renders_analysis_tab_from_project_contract() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let git_dir = repo_root.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("git dir");
+
+        let runtime = RuntimeLayout::from_repo_root(&repo_root);
+        runtime.ensure_exists().expect("runtime");
+
+        let shell = FakeShell::default()
+            .with_response_sequence("zellij list-sessions --short", &["", "ai-teamlead"])
+            .with_response(
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID ZELLIJ=0 ZELLIJ_SESSION_NAME=ai-teamlead zellij action new-tab --layout",
+                "",
+            );
+        let launcher = ZellijLauncher::new(&shell);
+        write_analysis_tab_template(
+            &repo_root,
+            "layout {\n  tab name=\"${TAB_NAME}\" split_direction=\"vertical\" {\n    pane command=\"bash\" {\n      args \"${PANE_ENTRYPOINT}\"\n    }\n  }\n}\n",
+        );
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir: git_dir.clone(),
+            github_owner: "dapi".into(),
+            github_repo: "teamlead".into(),
+        };
+        let zellij = ZellijConfig {
+            session_name: "ai-teamlead".into(),
+            tab_name: "issue-analysis".into(),
+            layout: None,
+        };
+
+        launcher
+            .launch_issue_analysis(
+                &repo,
+                &repo_root,
+                &runtime,
+                &zellij,
+                "https://github.com/dapi/teamlead/issues/42",
+                "session-uuid",
+                Path::new("/tmp/ai-teamlead"),
+                false,
+            )
+            .expect("launch should succeed");
+
+        let layout_content = std::fs::read_to_string(
+            runtime
+                .session_dir("session-uuid")
+                .join("launch-layout.kdl"),
+        )
+        .expect("layout file");
+        assert!(layout_content.contains("split_direction=\"vertical\""));
+        assert!(layout_content.contains("name=\"issue-analysis\""));
+        assert!(
+            !layout_content.contains("${TAB_NAME}")
+                && !layout_content.contains("${PANE_ENTRYPOINT}")
+        );
+    }
+
+    #[test]
+    fn launcher_reports_create_session_failure_before_attaching_tab() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let git_dir = repo_root.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("git dir");
+
+        let runtime = RuntimeLayout::from_repo_root(&repo_root);
+        runtime.ensure_exists().expect("runtime");
+
+        let shell = FakeShell::default().with_response("zellij list-sessions --short", "");
+        let launcher = ZellijLauncher::new(&shell);
+        write_analysis_tab_template(&repo_root, default_analysis_tab_template());
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir: git_dir.clone(),
+            github_owner: "dapi".into(),
+            github_repo: "teamlead".into(),
+        };
+        let zellij = ZellijConfig {
+            session_name: "ai-teamlead".into(),
+            tab_name: "issue-analysis".into(),
+            layout: Some("missing-layout".into()),
+        };
+
+        let error = launcher
+            .launch_issue_analysis(
+                &repo,
+                &repo_root,
+                &runtime,
+                &zellij,
+                "https://github.com/dapi/teamlead/issues/42",
+                "session-uuid",
+                Path::new("/tmp/ai-teamlead"),
+                false,
+            )
+            .expect_err("launch should fail");
+
+        let message = error.to_string();
+        assert!(message.contains("failed at launcher step: create session"));
+        assert!(!message.contains("failed at launcher step: add analysis tab"));
+    }
+
+    #[test]
+    fn rejects_analysis_tab_template_without_required_placeholders() {
+        let error = render_analysis_tab_layout(
+            "layout { tab { pane command=\"bash\" { args \"literal\" } } }\n",
+            "issue-analysis",
+            "/tmp/pane-entrypoint.sh",
+        )
+        .expect_err("template must fail");
+        assert!(error.to_string().contains("${TAB_NAME}"));
     }
 }
