@@ -61,9 +61,9 @@ instruction contract в `AGENTS.md`.
 
 ## Связанные документы
 
-- [AGENTS.md](/home/danil/code/teamlead/AGENTS.md)
-- [README.md](/home/danil/code/teamlead/README.md)
-- [docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md](/home/danil/code/teamlead/docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md)
+- [AGENTS.md](../../AGENTS.md)
+- [README.md](../../README.md)
+- [docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md](./0017-minimal-sdd-artifact-set-for-issue-analysis.md)
 
 ## Журнал изменений
 

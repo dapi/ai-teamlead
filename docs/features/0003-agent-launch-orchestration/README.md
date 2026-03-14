@@ -36,7 +36,7 @@ session/tab.
 
 ## Зависимости
 
-- [Feature 0001](../0001-ai-teamlead-daemon/README.md) — `ai-teamlead`
+- [Feature 0001](../0001-ai-teamlead-cli/README.md) — `ai-teamlead`
   предоставляет `poll` и `run`, которые вызывают orchestration launch path
 - [Feature 0002](../0002-repo-init/README.md) — `init` создает
   `./.ai-teamlead/launch-agent.sh` и `settings.yml`, которые использует

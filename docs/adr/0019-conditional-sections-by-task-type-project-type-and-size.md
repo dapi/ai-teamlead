@@ -83,8 +83,8 @@ Versioned SDD-комплект для issue-analysis не может быть п
 
 ## Связанные документы
 
-- [docs/issue-analysis-flow.md](/home/danil/code/teamlead/docs/issue-analysis-flow.md)
-- [docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md](/home/danil/code/teamlead/docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md)
+- [docs/issue-analysis-flow.md](../issue-analysis-flow.md)
+- [docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md](./0017-minimal-sdd-artifact-set-for-issue-analysis.md)
 
 ## Журнал изменений
 

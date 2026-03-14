@@ -103,10 +103,10 @@ Runtime-артефакты по-прежнему хранятся отдельн
 
 ## Связанные документы
 
-- [README.md](/home/danil/code/teamlead/README.md)
-- [docs/features/0002-repo-init/README.md](/home/danil/code/teamlead/docs/features/0002-repo-init/README.md)
-- [docs/adr/0001-repo-local-ai-config.md](/home/danil/code/teamlead/docs/adr/0001-repo-local-ai-config.md)
-- [docs/adr/0004-runtime-artifacts-in-git-dir.md](/home/danil/code/teamlead/docs/adr/0004-runtime-artifacts-in-git-dir.md)
+- [README.md](../../README.md)
+- [docs/features/0002-repo-init/README.md](../features/0002-repo-init/README.md)
+- [docs/adr/0001-repo-local-ai-config.md](./0001-repo-local-ai-config.md)
+- [docs/adr/0004-runtime-artifacts-in-git-dir.md](./0004-runtime-artifacts-in-git-dir.md)
 
 ## Журнал изменений
 

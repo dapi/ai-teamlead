@@ -64,9 +64,9 @@
 
 ## Связанные документы
 
-- [docs/issue-analysis-flow.md](/home/danil/code/teamlead/docs/issue-analysis-flow.md)
-- [docs/features/0001-ai-teamlead-daemon/README.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/README.md)
-- [docs/adr/0021-zellij-session-target-resolution.md](/home/danil/code/teamlead/docs/adr/0021-zellij-session-target-resolution.md)
+- [docs/issue-analysis-flow.md](../issue-analysis-flow.md)
+- [docs/features/0001-ai-teamlead-cli/README.md](../features/0001-ai-teamlead-cli/README.md)
+- [docs/adr/0021-zellij-session-target-resolution.md](./0021-zellij-session-target-resolution.md)
 
 ## Журнал изменений
 

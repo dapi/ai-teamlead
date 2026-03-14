@@ -1,4 +1,4 @@
-# ADR-0021: Приоритет разрешения target session для `zellij`
+# ADR-0023: Приоритет разрешения target session для `zellij`
 
 Статус: accepted
 Дата: 2026-03-14

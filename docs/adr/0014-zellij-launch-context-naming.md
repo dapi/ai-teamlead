@@ -1,6 +1,6 @@
 # ADR-0014: Naming contract для `zellij` launch context
 
-Статус: superseded by ADR-0021
+Статус: superseded by ADR-0023
 Дата: 2026-03-13
 
 ## Контекст
@@ -61,12 +61,12 @@ Runtime `zellij` identifiers не хранятся в versioned config:
 
 ## Связанные документы
 
-- [README.md](/home/danil/code/teamlead/README.md)
-- [docs/features/0003-agent-launch-orchestration/README.md](/home/danil/code/teamlead/docs/features/0003-agent-launch-orchestration/README.md)
-- [docs/features/0002-repo-init/README.md](/home/danil/code/teamlead/docs/features/0002-repo-init/README.md)
-- [docs/adr/0012-repo-init-command-and-project-contract-layer.md](/home/danil/code/teamlead/docs/adr/0012-repo-init-command-and-project-contract-layer.md)
-- [docs/adr/0015-versioned-launch-agent-contract.md](/home/danil/code/teamlead/docs/adr/0015-versioned-launch-agent-contract.md)
-- [docs/adr/0016-configurable-analysis-workspace-templates.md](/home/danil/code/teamlead/docs/adr/0016-configurable-analysis-workspace-templates.md)
+- [README.md](../../README.md)
+- [docs/features/0003-agent-launch-orchestration/README.md](../features/0003-agent-launch-orchestration/README.md)
+- [docs/features/0002-repo-init/README.md](../features/0002-repo-init/README.md)
+- [docs/adr/0012-repo-init-command-and-project-contract-layer.md](./0012-repo-init-command-and-project-contract-layer.md)
+- [docs/adr/0015-versioned-launch-agent-contract.md](./0015-versioned-launch-agent-contract.md)
+- [docs/adr/0016-configurable-analysis-workspace-templates.md](./0016-configurable-analysis-workspace-templates.md)
 
 ## Журнал изменений
 
@@ -80,4 +80,4 @@ Runtime `zellij` identifiers не хранятся в versioned config:
 - default для `zellij.session_name` переведен на `${REPO}`
 - рендеринг `zellij.session_name` унифицирован с общим template contract
 - дальнейший выбор effective target session вынесен в
-  [ADR-0021](./0021-zellij-session-target-resolution.md)
+  [ADR-0023](./0023-zellij-session-target-resolution.md)
