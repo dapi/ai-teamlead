@@ -68,6 +68,7 @@
 - [docs/features/0001-ai-teamlead-daemon/README.md](./docs/features/0001-ai-teamlead-daemon/README.md)
 - [docs/features/0002-repo-init/README.md](./docs/features/0002-repo-init/README.md)
 - [docs/features/0003-agent-launch-orchestration/README.md](./docs/features/0003-agent-launch-orchestration/README.md)
+- [docs/features/0005-agent-flow-integration-testing/README.md](./docs/features/0005-agent-flow-integration-testing/README.md)
 - [AURA.md](./AURA.md) как project-local доступ к
   личному высокоуровневому инженерному видению разработчика
 

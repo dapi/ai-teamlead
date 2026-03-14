@@ -82,6 +82,11 @@
 Для MVP допустимо использовать test doubles или fake adapters там, где прямой
 e2e с `gh` или `zellij` слишком дорог в поддержке.
 
+Канонический локальный entrypoint и sandbox-платформа для agent-flow
+integration tests должны описываться в отдельной feature-спеке:
+
+- [docs/features/0005-agent-flow-integration-testing/README.md](./features/0005-agent-flow-integration-testing/README.md)
+
 ## Обязательные smoke tests для MVP
 
 Перед приемкой MVP нужно пройти вручную минимум:
