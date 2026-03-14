@@ -2,6 +2,9 @@
 
 Статус: draft
 Последнее обновление: 2026-03-14
+Статус согласования: pending human review
+Approved By: -
+Approved At: -
 
 ## Problem
 
@@ -13,7 +16,8 @@
 
 Из-за этого следующий этап остается неявным:
 
-- не определен канонический entrypoint для запуска реализации;
+- не определено, как единая команда `run <issue>` должна распознавать переход
+  от analysis stage к implementation stage;
 - не зафиксировано, какие analysis artifacts считаются обязательным входом;
 - branch/worktree lifecycle для реализации не отделен от analysis lifecycle;
 - нет явного контракта для commit, push, PR и final quality gate;
@@ -35,6 +39,8 @@
 Нужен отдельный `issue-implementation-flow`, который:
 
 - стартует только после принятого анализа;
+- вызывается через тот же канонический `run <issue>`, который сам маршрутизирует
+  issue по текущей стадии;
 - использует approved analysis artifacts как входной контракт;
 - подготавливает отдельный implementation workspace для кода;
 - ведет issue через явный implementation lifecycle;
@@ -51,13 +57,14 @@ implementation orchestration в коде и project-local assets без допо
 
 - отдельный системный SSOT для `issue-implementation-flow`;
 - lifecycle issue после `Ready for Implementation`;
-- issue-level entrypoint для implementation stage;
+- stage-aware dispatch внутри единого issue-level entrypoint `run`;
 - контракт использования analysis artifacts;
 - branch/worktree/session lifecycle для implementation stage;
 - contract для commit, push, PR и завершения стадии;
 - quality gates и expected outcomes implementation stage;
 - список обязательных feature-docs, project-local assets и ADR, нужных для
   реализации.
+- contract approval metadata для SDD-комплекта и плана реализации.
 
 ## Non-Goals
 
@@ -76,7 +83,8 @@ implementation orchestration в коде и project-local assets без допо
   repo-specific naming и launcher behavior должны жить в versioned config и
   project-local assets;
 - analysis и implementation являются разными stage и не должны делить один
-  неявный launcher/prompt contract;
+  неявный prompt contract, даже если верхнеуровневый CLI entrypoint у них
+  общий;
 - approved analysis artifacts должны быть доступны как стабильный вход для
   implementation flow;
 - implementation stage не должен нарушать уже принятый принцип:
@@ -86,14 +94,17 @@ implementation orchestration в коде и project-local assets без допо
 - finalization implementation stage должна инкапсулировать VCS и GitHub
   операции через CLI-контракт, а не через ручные последовательности команд в
   prompt.
+- момент approval плана должен быть наблюдаемым: документы обязаны хранить
+  статус согласования, а после утверждения фиксировать кто и когда принял план.
 
 ## User Story
 
 Как владелец репозитория, я хочу после принятия analysis-плана запускать
-отдельный implementation flow, который использует утвержденный SDD-комплект,
-создает правильный coding workspace, проводит агент через тесты и публикует
-implementation PR, чтобы переход от plan-ready к реальной реализации был
-детерминированным и проверяемым.
+тот же `run <issue>`, который сам понимает, что issue уже на implementation
+stage, использует утвержденный SDD-комплект, создает правильный coding
+workspace, проводит агент через тесты и публикует implementation PR, чтобы
+переход от plan-ready к реальной реализации был детерминированным и
+проверяемым.
 
 ## Use Cases
 
@@ -101,7 +112,9 @@ implementation PR, чтобы переход от plan-ready к реальной
 
 - issue уже прошла analysis stage;
 - план принят человеком;
-- implementation flow claim-ит issue из `Ready for Implementation`;
+- оператор вызывает `run <issue>`;
+- dispatcher определяет, что issue находится в `Ready for Implementation`, и
+  запускает implementation flow;
 - создается implementation branch/worktree;
 - агент реализует код, проходит проверки и публикует PR.
 
@@ -109,6 +122,7 @@ implementation PR, чтобы переход от plan-ready к реальной
 
 - issue находится в `Implementation Blocked`;
 - оператор снимает блокер и повторно запускает implementation flow;
+- повторный вход снова идет через `run <issue>`;
 - flow переиспользует stage-specific binding и продолжает реализацию без
   смешения с analysis session.
 
@@ -117,6 +131,7 @@ implementation PR, чтобы переход от plan-ready к реальной
 - implementation PR уже создан;
 - ревью или CI требуют изменений;
 - issue возвращается в implementation stage;
+- следующий retry снова начинается через единый `run <issue>`;
 - агент дорабатывает код в существующем implementation branch lifecycle, не
   меняя analysis artifacts.
 

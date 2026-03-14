@@ -5,6 +5,9 @@
 Тип проекта: `infra/platform`
 Размер: `medium`
 Последнее обновление: 2026-03-14
+Статус согласования: pending human review
+Approved By: -
+Approved At: -
 
 ## Контекст
 
@@ -30,6 +33,24 @@ SDD-комплект и после human gate доходит до `Ready for Imp
 Цель анализа: зафиксировать минимальный, но достаточный контракт отдельного
 `issue-implementation-flow`, который можно будет реализовывать без архитектурной
 каши и без скрытых решений в коде.
+
+## Approval
+
+Пакет анализа считается approved только после двух событий одновременно:
+
+- владелец репозитория или явно назначенный reviewer явно подтверждает план в
+  агентской сессии;
+- `ai-teamlead` переводит issue из `Waiting for Plan Review` в
+  `Ready for Implementation`.
+
+В этот же момент пакет должен менять `Статус согласования` с `pending human review`
+на `approved` и фиксировать:
+
+- `Approved By`
+- `Approved At`
+
+До этого момента все документы комплекта остаются draft и не считаются
+утвержденным входом для implementation stage.
 
 ## Артефакты
 
@@ -69,10 +90,10 @@ SDD-комплект и после human gate доходит до `Ready for Imp
 
 Предлагаемый контракт:
 
-- implementation stage оформляется как отдельный SSOT и отдельная feature, а не
-  как расширение `issue-analysis-flow`;
-- вход в реализацию происходит только из `Ready for Implementation` через
-  отдельный issue-level entrypoint;
+- implementation stage оформляется как отдельный SSOT и отдельная feature, но
+  issue-level CLI entrypoint остается единым;
+- оператор по-прежнему вызывает `run <issue>`, а система сама определяет
+  текущую стадию issue и выбирает нужный flow;
 - approved analysis artifacts становятся обязательным входным контрактом для
   реализации;
 - implementation branch/worktree lifecycle отделяется от analysis branch;

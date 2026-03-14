@@ -2,6 +2,9 @@
 
 Статус: draft
 Последнее обновление: 2026-03-14
+Статус согласования: pending human review
+Approved By: -
+Approved At: -
 
 ## Назначение
 
@@ -16,10 +19,11 @@ quality gates до human code review.
 - отдельный SSOT `issue-implementation-flow`;
 - feature-спека implementation stage;
 - новые ADR по input contract, runtime/session-binding и finalization;
-- новый issue-level implementation entrypoint;
+- stage-aware dispatch внутри единого `run <issue>`;
 - stage-specific launcher/config/runtime contract;
 - commit/push/PR/CI transitions implementation stage;
 - unit, integration и headless-friendly smoke coverage.
+- approval metadata для SDD-комплекта и implementation plan.
 
 Вне scope:
 
@@ -48,7 +52,8 @@ quality gates до human code review.
 ## Зависимости и предпосылки
 
 - текущий `issue-analysis-flow` остается analysis-only и передает issue в
-  `Ready for Implementation`;
+  `Ready for Implementation`, после чего единый `run` должен уметь
+  маршрутизировать issue уже в implementation flow;
 - approved analysis artifacts доступны как versioned вход для coding stage;
 - проект готов добавить новые GitHub Project statuses для implementation
   lifecycle;
@@ -75,6 +80,8 @@ quality gates до human code review.
 
 - существует `docs/issue-implementation-flow.md`;
 - создана feature-спека implementation stage по трем осям;
+- зафиксирован approval contract: кто утверждает план, когда меняется статус
+  документов и где хранятся `Approved By` / `Approved At`;
 - `README.md` и связанные overview-документы знают о новом stage только как о
   summary с ссылками на профильные документы.
 
@@ -97,6 +104,7 @@ quality gates до human code review.
 Результат этапа:
 
 - принят ADR про approved analysis artifacts как canonical input;
+- принят ADR про stage-aware dispatch внутри единого `run`;
 - принят ADR про stage-scoped runtime/session-binding;
 - принят ADR про implementation finalization contract для commit/push/PR/CI.
 
@@ -105,28 +113,31 @@ quality gates до human code review.
 - новые ADR не противоречат ADR-0008, ADR-0015, ADR-0016 и ADR-0020;
 - по ним можно восстановить точные границы launcher, runtime и CLI.
 
-### Этап 3. Добавить implementation statuses и entrypoint
+### Этап 3. Добавить implementation statuses и stage-aware dispatch в `run`
 
 Цель:
 
-- сделать lifecycle implementation stage исполнимым через core CLI.
+- сделать lifecycle implementation stage исполнимым через текущий core CLI
+  без отдельной пользовательской команды.
 
 Основание:
 
-- без отдельного entrypoint `Ready for Implementation` остается тупиковым
+- без stage-aware dispatch внутри `run` статус `Ready for Implementation`
+  остается тупиковым
   статусом;
-- `run` по текущему SSOT не должен стартовать реализацию.
+- пользователь ожидает всегда вызывать `run <issue>` независимо от стадии.
 
 Результат этапа:
 
 - config contract поддерживает implementation statuses;
-- CLI получает отдельный implementation entrypoint;
+- `run` получает stage dispatcher для implementation statuses;
 - GitHub Project transitions валидируются так же строго, как в analysis flow.
 
 Проверка:
 
 - unit-тесты на status guards и mapping статусов;
-- integration-тесты на claim/re-entry/reject paths implementation stage.
+- integration-тесты на dispatch, claim/re-entry/reject paths implementation
+  stage.
 
 ### Этап 4. Реализовать stage-specific launcher и workspace contract
 
@@ -204,7 +215,8 @@ Issue можно считать реализованной, если:
 - `issue-implementation-flow` задокументирован отдельным SSOT и feature-спекой;
 - approved analysis artifacts, runtime/session-binding и finalization path
   зафиксированы отдельными ADR;
-- существует отдельный implementation entrypoint из `Ready for Implementation`;
+- `run <issue>` умеет маршрутизировать `Ready for Implementation` в
+  implementation flow;
 - implementation branch/worktree/PR lifecycle configurable и проверяем;
 - implementation stage проходит хотя бы один целевой end-to-end сценарий до
   `Waiting for Code Review`;

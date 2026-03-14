@@ -2,21 +2,25 @@
 
 Статус: draft
 Последнее обновление: 2026-03-14
+Статус согласования: pending human review
+Approved By: -
+Approved At: -
 
 ## Acceptance Criteria
 
 - существует отдельный SSOT `issue-implementation-flow`, который описывает
   lifecycle после `Ready for Implementation` и не смешивает его с analysis
   flow;
-- implementation stage имеет собственный issue-level entrypoint и не требует
-  повторного использования analysis-only `run`;
+- `run <issue>` остается единым issue-level entrypoint и корректно
+  маршрутизирует issue между analysis и implementation stage;
 - approved analysis artifacts явно зафиксированы как обязательный входной
   контракт implementation stage;
 - branch/worktree/PR lifecycle implementation stage описан отдельно от
   analysis branch lifecycle;
 - contract commit/push/PR/finalization описан через CLI-инкапсуляцию, а не
   через неформальный список shell-команд в prompt;
-- quality gates явно различают локальную валидацию, CI и human review.
+- quality gates явно различают локальную валидацию, CI и human review;
+- approval metadata позволяет понять, кто и когда утвердил план.
 
 ## Ready Criteria
 
@@ -25,7 +29,7 @@ Issue можно считать готовой к реализации, если
 - issue-level SDD-комплект в `specs/issues/5/`;
 - отдельный implementation SSOT;
 - отдельная feature-спека implementation stage;
-- новые ADR по runtime/finalization/input contract;
+- новые ADR по dispatch/runtime/finalization/input contract;
 - config и project-local asset changes для implementation launcher;
 - test strategy для unit, integration и smoke coverage implementation stage.
 
@@ -33,6 +37,8 @@ Issue можно считать готовой к реализации, если
 
 - `issue-analysis-flow` и `issue-implementation-flow` остаются отдельными
   flow-контрактами;
+- `run` является единым issue-level entrypoint и не требует от пользователя
+  выбирать flow вручную;
 - implementation flow принимает issue только из `Ready for Implementation` или
   его stage-specific follow-up статусов;
 - implementation session-binding не перезаписывает analysis session-binding;
@@ -44,6 +50,8 @@ Issue можно считать готовой к реализации, если
   готовой к push/review;
 - проверки, которые могут задеть host `zellij`, запускаются только в
   изолированном headless environment.
+- approved SDD-комплект должен содержать metadata про `Approved By` и
+  `Approved At`.
 
 ## Test Plan
 
@@ -51,6 +59,7 @@ Issue можно считать готовой к реализации, если
 
 - парсинг новых implementation statuses и stage-specific config templates;
 - проверка допустимости входных статусов implementation entrypoint;
+- проверка stage-aware dispatch внутри `run` по project status;
 - рендер implementation branch/worktree naming из config;
 - stage-aware runtime/session-binding без конфликта с analysis binding;
 - mapping outcomes implementation finalization в project statuses;
@@ -58,8 +67,7 @@ Issue можно считать готовой к реализации, если
 
 ### Integration tests
 
-- запуск implementation entrypoint на fake runtime с issue в
-  `Ready for Implementation`;
+- запуск `run <issue>` на fake runtime с issue в `Ready for Implementation`;
 - создание или reuse implementation worktree и launcher context;
 - чтение approved analysis artifacts как input contract;
 - stage finalization: commit, push, draft PR, переход в `Waiting for CI`;
@@ -79,7 +87,8 @@ Issue можно считать готовой к реализации, если
 
 1. Issue находится в `Ready for Implementation`.
 2. Approved analysis artifacts доступны по versioned path.
-3. Implementation entrypoint переводит issue в `Implementation In Progress`.
+3. `run` распознает implementation stage и переводит issue в
+   `Implementation In Progress`.
 4. Создается implementation branch/worktree и stage-specific launcher context.
 5. Агент вносит кодовые изменения и запускает обязательные локальные тесты.
 6. Finalization path делает commit, push и создает draft PR.
@@ -121,6 +130,7 @@ Issue можно считать готовой к реализации, если
 - новый SSOT описывает все implementation statuses и переходы;
 - issue-level spec не противоречит `docs/issue-analysis-flow.md`;
 - feature-docs, ADR и config contract ссылаются друг на друга;
+- contract единого `run` как stage dispatcher описан явно;
 - stage-aware runtime contract не ломает существующий analysis binding;
 - commit/push/PR contract проверяем и не спрятан в prompt;
 - unit coverage закрывает status/config/runtime branching;
