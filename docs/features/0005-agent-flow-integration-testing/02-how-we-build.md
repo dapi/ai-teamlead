@@ -9,11 +9,12 @@
    загружает repo-local config, выбирает сценарий и orchestrate-ит запуск.
 2. `sandbox builder`
    Подготавливает disposable Docker sandbox с pinned `zellij`, нужными CLI и
-   временным workspace snapshot.
+   volumes для текущего проекта и разрешенных host-level agent файлов.
 3. `agent bridge`
-   Передает в sandbox только разрешенные host env vars, credentials,
-   config-files и account/session auth artifacts для выбранного agent profile,
-   используя те же host-level значения, с которыми запущен test suite.
+   Монтирует в sandbox через volumes только текущий проект и нужные host-level
+   agent files для выбранного profile: например `~/.codex`, `~/.claude` и
+   другие явно разрешенные config/auth artifacts из того же окружения, где
+   запущен test suite.
 4. `scenario runner`
    Запускает внутри sandbox `ai-teamlead`, `launch-agent.sh`, `gh` stub и
    assertion hooks.
@@ -25,10 +26,11 @@
 
 1. host CLI читает `./.ai-teamlead/settings.yml`
 2. host CLI читает versioned scenario manifest
-3. host CLI собирает sandbox и workspace snapshot
+3. host CLI собирает sandbox и монтирует текущий проект и allowlisted
+   host-level files через volumes
 4. sandbox запускает `ai-teamlead` entrypoint
 5. `ai-teamlead` проходит обычный launcher/orchestration path
-6. выбранный agent profile (`stub`, `claude`, `codex`) отрабатывает внутри того
+6. выбранный agent profile (`stub`, `codex`, `claude`) отрабатывает внутри того
    же sandbox
 7. все обращения `ai-teamlead` к GitHub проходят через `gh` stub и пишутся в
    invocation log
@@ -42,22 +44,20 @@ execution surface.
 
 ### Sandbox имеет доступ к
 
-- read/write копии workspace snapshot внутри контейнера
+- текущему проекту внутри контейнера
+- `~/.codex`, `~/.claude` и другим нужным для выбранного agent profile
+  host-level config/auth файлам, смонтированным через явный allowlist volumes
 - sandbox-local temporary directories и runtime-artifacts
-- read-only host mounts, перечисленным в allowlist для agent profile
 - export-каталогу артефактов, заранее выделенному runner-ом
-- outbound network только к allowlisted LLM endpoints для выбранного
-  live-profile
 - встроенному `gh` stub вместо реального `gh`
 
 ### Sandbox не имеет доступа к
 
 - host `zellij` session, tab, pane и socket
-- рабочему дереву пользователя вне snapshot
+- произвольным путям пользователя вне явно разрешенных volumes
 - произвольным путям в `$HOME`, не перечисленным в allowlist mounts
 - host git credentials, GitHub credentials и реальному `gh` binary
 - реальному GitHub API и GitHub web endpoints во время тестового прогона
-- произвольному outbound network вне allowlisted LLM endpoints
 
 Нарушение любой из этих границ должно считаться ошибкой конфигурации или
 `preflight failed`, а не неявным fallback.
@@ -74,9 +74,9 @@ execution surface.
 - `sandbox`
   Disposable container runtime и его filesystem.
 - `workspace snapshot`
-  Изолированная копия текущего репозитория для прогона.
+  Текущий проект, смонтированный в sandbox через Docker volume.
 - `agent profile`
-  Набор правил, как запускать `stub`, `claude` или `codex`.
+  Набор правил, как запускать `stub`, `codex` или `claude`.
 - `artifact bundle`
   Экспортируемый результат теста.
 - `gh invocation log`
@@ -103,18 +103,21 @@ execution surface.
 
 ### Workspace snapshot
 
-В MVP snapshot должен включать:
+В MVP sandbox должен получать через volume mount:
 
 - текущее содержимое репозитория
 - versioned `.ai-teamlead/`, `.claude/`, `.codex/`, если они есть в repo
 - достаточный git context для работы `ai-teamlead`, `git worktree` и launcher
 
-Платформа должна поддержать локальную разработку, поэтому snapshot нельзя
-жестко ограничивать только последним коммитом. Предпочтительный контракт:
+Платформа должна поддержать локальную разработку, поэтому sandbox должен видеть
+актуальное состояние текущего проекта, а не только последний commit.
+Предпочтительный контракт:
 
-- sandbox получает копию текущего working tree
-- исходный host repo остается неизменным
-- все побочные эффекты git/runtime пишутся только внутрь snapshot
+- sandbox получает текущий working tree через volume mount
+- дополнительные host-level agent files (`~/.codex`, `~/.claude` и другие
+  allowlisted paths) также пробрасываются через volumes
+- runner должен явно контролировать и диагностировать любые побочные эффекты
+  внутри смонтированного проекта
 
 ## Интерфейсы
 
@@ -125,14 +128,14 @@ execution surface.
 ```bash
 ai-teamlead test agent-flow \
   --scenario run-happy-path \
-  --agent claude \
+  --agent codex \
   --mode live
 ```
 
 Минимальные аргументы первой версии:
 
 - `--scenario <name>`
-- `--agent <stub|claude|codex>`
+- `--agent <stub|codex|claude>`
 - `--mode <stub|live>`
 
 Дополнительные аргументы:
@@ -145,8 +148,8 @@ ai-teamlead test agent-flow \
 Правила:
 
 - `--mode stub` разрешает только `--agent stub`
-- `--mode live` разрешает `claude` и `codex`
-- если `--agent` не задан, default live profile = `claude`
+- `--mode live` разрешает `codex` и `claude`
+- если `--agent` не задан, default live profile = `codex`
 - итоговый exit code отражает verdict сценария
 
 ### Scenario manifest
@@ -210,13 +213,6 @@ Bridge должен быть явным и profile-based.
 Bridge обязан брать значения из host environment и host config, с которыми
 запущен test suite, а не из отдельного скрытого тестового профиля.
 
-Bridge обязан поддерживать оба класса live-auth path:
-
-- API-based auth через allowlisted env vars, если агент работает через provider
-  API
-- account/session auth через allowlisted host config/session artifacts, если
-  агент работает через подписочный login самого `claude` или `codex`
-
 Недопустимо:
 
 - монтировать весь `$HOME` целиком
@@ -255,8 +251,9 @@ GitHub слой для integration tests должен реализовывать
 - Канонический sandbox для MVP: Docker-based headless runtime.
 - Канонический `zellij` внутри sandbox: pinned version по ADR-0011.
 - Live и stub режимы используют один и тот же sandbox entrypoint.
-- Default live path для локального тестирования: `claude` / Claude Code с
-  моделью класса Sonnet.
+- Default live path для локального тестирования: `codex`.
+- `claude` поддерживается как дополнительный live-profile, в том числе для
+  Claude Code с моделью класса Sonnet.
 - GitHub integration в sandbox всегда проходит через `gh` stub и invocation log.
 - Вердикт сценария считается по assertions, а не по одному exit code процесса.
 - Артефакты должны собираться вне зависимости от `passed` или `failed`.
@@ -282,27 +279,23 @@ integration_tests:
       mode: stub
       log_path: "logs/gh-invocations.jsonl"
     agent_profiles:
-      claude:
-        mode: live
-        default: true
-        model_family: sonnet
-        auth_modes:
-          - subscription_account
-          - api_key
-        preferred_auth_mode: subscription_account
-        env_allowlist:
-          - ANTHROPIC_API_KEY
-          - ANTHROPIC_BASE_URL
-        file_mounts: []
       codex:
         mode: live
-        auth_modes:
-          - subscription_account
-          - api_key
+        default: true
         env_allowlist:
           - OPENAI_API_KEY
           - OPENAI_BASE_URL
-        file_mounts: []
+        file_mounts:
+          - "~/.codex"
+      claude:
+        mode: live
+        env_allowlist:
+          - ANTHROPIC_API_KEY
+          - ANTHROPIC_BASE_URL
+        file_mounts:
+          - "~/.claude"
+          - "~/.config/claude"
+        model_family: sonnet
       stub:
         mode: stub
         env_allowlist: []
@@ -313,10 +306,9 @@ integration_tests:
 
 - без `integration_tests.agent_flow` entrypoint использует встроенные safe
   defaults
-- встроенный default live profile = `claude`
-- для `claude` и `codex` поддерживаются оба пути аутентификации:
-  `subscription_account` и `api_key`
-- для `claude` preferred auth path первой версии = `subscription_account`
+- встроенный default live profile = `codex`
+- для `codex` и `claude` sandbox использует те же host-level env vars и
+  volume-mounted account/config files, с которыми запущен test suite
 - встроенный GitHub mode = `stub`
 - secrets и значения токенов не хранятся в versioned YAML
 - в config хранятся только имена env vars, пути mounts и runtime defaults
@@ -329,8 +321,8 @@ integration_tests:
   прямой real GitHub path считается out of contract.
 - В первой версии live assertions должны проверять orchestration и артефакты, а
   не semantic quality generated текста.
-- Если agent CLI отсутствует или нужный auth path не проброшен
-  (`subscription_account` либо `api_key`), сценарий должен завершаться явным
+- Если agent CLI отсутствует или в sandbox не проброшены нужные env/config
+  volumes для выбранного agent profile, сценарий должен завершаться явным
   `preflight failed`, а не неявным timeout.
 
 ## Связанные документы

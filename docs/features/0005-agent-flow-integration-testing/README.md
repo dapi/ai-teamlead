@@ -15,8 +15,8 @@ flow end-to-end.
 
 - с единым локальным entrypoint
 - с disposable sandbox, не использующим host `zellij`
-- с приоритетной поддержкой реального `claude` и дополнительной поддержкой
-  `codex`
+- с поддержкой реального `codex` по умолчанию и дополнительной поддержкой
+  `claude`
 - с использованием тех же host-level настроек, credentials и параметров
   подключения к LLM, с которыми запущен сам test suite, через явный allowlist
 - с поддержкой host-level account/session auth для `claude` / `codex` по

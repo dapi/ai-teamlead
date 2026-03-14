@@ -10,7 +10,7 @@
 - `launch-agent.sh` и project-local flow prompt используются без test-only
   bypass
 - `stub` и `live` режимы разделяют один и тот же orchestration path
-- default live path использует `claude` / Claude Code с моделью класса Sonnet
+- default live path использует `codex`
 - все GitHub-взаимодействия идут через `gh` stub, а не через реальный GitHub
 - agent credentials и config files попадают в sandbox только через явный
   allowlist
@@ -29,9 +29,9 @@
 Feature считается готовой, если:
 
 - есть хотя бы один стабильный `stub`-сценарий для CI
-- есть хотя бы один локальный `live`-сценарий для реального агента `claude`
-- `claude` / Sonnet зафиксирован как default live path
-- `codex` зафиксирован как дополнительный live-profile первой версии
+- есть хотя бы один локальный `live`-сценарий для реального агента `codex`
+- `codex` зафиксирован как default live path
+- `claude` поддержан как дополнительный live-profile первой версии
 - есть как минимум один сценарий, который проверяет invocation log `gh` stub
 - результаты можно воспроизвести повторным запуском на той же машине
 - ошибки preflight, sandbox startup и assertion failure различимы по статусу и
@@ -68,18 +68,19 @@ Feature считается готовой, если:
 - сценарий моделирует `needs-clarification`
 - runner проверяет смену статуса и наличие диагностического сообщения
 
-### Сценарий 3. `live codex` как дополнительный профиль
+### Сценарий 3. `live codex`
 
 - пользователь запускает локальный live-сценарий с `codex`
 - sandbox получает только разрешенные env vars и mounts для `codex`
 - агент стартует внутри sandbox и использует project-local flow
 - по завершении доступны логи и runtime artifacts
 
-### Сценарий 4. `live claude`
+### Сценарий 4. `live claude` как дополнительный профиль
 
 - пользователь запускает локальный live-сценарий с `claude`
 - sandbox получает allowlisted настройки для `claude`
-- по умолчанию используется профиль Claude Code с моделью класса Sonnet
+- по умолчанию для `claude` используется профиль Claude Code с моделью класса
+  Sonnet
 - сценарий остается валидным, если доступ к модели обеспечивается через
   подписочный account login Claude Code, а не через отдельный API key
 - orchestration path совпадает с `codex`-сценарием до точки выбора agent
@@ -98,11 +99,12 @@ Feature считается готовой, если:
 - runner фиксирует нарушение sandbox policy
 - прогон завершается с явной ошибкой, а не с неявным fallback на реальный `gh`
 
-### Сценарий 7. Snapshot с локальными изменениями
+### Сценарий 7. Текущий проект с локальными изменениями
 
 - в текущем working tree есть локальные изменения flow или launcher
-- snapshot включает эти изменения в sandbox
-- host repo остается неизменным после завершения теста
+- sandbox видит эти изменения через volume mount текущего проекта
+- runner явно диагностирует любые побочные эффекты внутри смонтированного
+  проекта
 
 ### Сценарий 8. Падение assertions
 
