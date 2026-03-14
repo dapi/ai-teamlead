@@ -12,7 +12,8 @@
    временным workspace snapshot.
 3. `agent bridge`
    Передает в sandbox только разрешенные host env vars, credentials и
-   config-files для выбранного agent profile.
+   config-files для выбранного agent profile, используя те же host-level
+   значения, с которыми запущен test suite.
 4. `scenario runner`
    Запускает внутри sandbox `ai-teamlead`, `launch-agent.sh`, fake/stub
    adapters и assertion hooks.
@@ -27,7 +28,7 @@
 3. host CLI собирает sandbox и workspace snapshot
 4. sandbox запускает `ai-teamlead` entrypoint
 5. `ai-teamlead` проходит обычный launcher/orchestration path
-6. выбранный agent profile (`stub`, `codex`, `claude`) отрабатывает внутри того
+6. выбранный agent profile (`stub`, `claude`, `codex`) отрабатывает внутри того
    же sandbox
 7. runner выполняет assertions
 8. artifact collector сохраняет результат вне sandbox
@@ -46,7 +47,7 @@
 - `workspace snapshot`
   Изолированная копия текущего репозитория для прогона.
 - `agent profile`
-  Набор правил, как запускать `stub`, `codex` или `claude`.
+  Набор правил, как запускать `stub`, `claude` или `codex`.
 - `artifact bundle`
   Экспортируемый результат теста.
 
@@ -88,14 +89,14 @@
 ```bash
 ai-teamlead test agent-flow \
   --scenario run-happy-path \
-  --agent codex \
+  --agent claude \
   --mode live
 ```
 
 Минимальные аргументы первой версии:
 
 - `--scenario <name>`
-- `--agent <stub|codex|claude>`
+- `--agent <stub|claude|codex>`
 - `--mode <stub|live>`
 
 Дополнительные аргументы:
@@ -108,7 +109,8 @@ ai-teamlead test agent-flow \
 Правила:
 
 - `--mode stub` разрешает только `--agent stub`
-- `--mode live` разрешает `codex` и `claude`
+- `--mode live` разрешает `claude` и `codex`
+- если `--agent` не задан, default live profile = `claude`
 - итоговый exit code отражает verdict сценария
 
 ### Scenario manifest
@@ -159,6 +161,9 @@ Bridge должен быть явным и profile-based.
 - user-local config dirs или files для конкретного агента
 - repo-local `.claude/` и `.codex/`
 
+Bridge обязан брать значения из host environment и host config, с которыми
+запущен test suite, а не из отдельного скрытого тестового профиля.
+
 Недопустимо:
 
 - монтировать весь `$HOME` целиком
@@ -181,6 +186,8 @@ Bridge должен быть явным и profile-based.
 - Канонический sandbox для MVP: Docker-based headless runtime.
 - Канонический `zellij` внутри sandbox: pinned version по ADR-0011.
 - Live и stub режимы используют один и тот же sandbox entrypoint.
+- Default live path для локального тестирования: `claude` / Claude Code с
+  моделью класса Sonnet.
 - Вердикт сценария считается по assertions, а не по одному exit code процесса.
 - Артефакты должны собираться вне зависимости от `passed` или `failed`.
 - Sandbox должен быть disposable по умолчанию; сохранение возможно только через
@@ -202,16 +209,19 @@ integration_tests:
     artifacts_dir: ".git/.ai-teamlead/test-runs"
     scenario_root: ".ai-teamlead/tests/agent-flow"
     agent_profiles:
+      claude:
+        mode: live
+        default: true
+        model_family: sonnet
+        env_allowlist:
+          - ANTHROPIC_API_KEY
+          - ANTHROPIC_BASE_URL
+        file_mounts: []
       codex:
         mode: live
         env_allowlist:
           - OPENAI_API_KEY
           - OPENAI_BASE_URL
-        file_mounts: []
-      claude:
-        mode: live
-        env_allowlist:
-          - ANTHROPIC_API_KEY
         file_mounts: []
       stub:
         mode: stub
@@ -223,6 +233,7 @@ integration_tests:
 
 - без `integration_tests.agent_flow` entrypoint использует встроенные safe
   defaults
+- встроенный default live profile = `claude`
 - secrets и значения токенов не хранятся в versioned YAML
 - в config хранятся только имена env vars, пути mounts и runtime defaults
 

@@ -10,8 +10,11 @@
 - `launch-agent.sh` и project-local flow prompt используются без test-only
   bypass
 - `stub` и `live` режимы разделяют один и тот же orchestration path
+- default live path использует `claude` / Claude Code с моделью класса Sonnet
 - agent credentials и config files попадают в sandbox только через явный
   allowlist
+- bridge использует те же host-level credentials и параметры подключения, с
+  которыми запущен сам test suite
 - forwarded secrets не сохраняются в artifact bundle и логах
 - по завершении прогона пользователь получает итоговый verdict и путь к
   артефактам
@@ -21,10 +24,10 @@
 Feature считается готовой, если:
 
 - есть хотя бы один стабильный `stub`-сценарий для CI
-- есть хотя бы один локальный `live`-сценарий для реального агента
-- поддержаны как минимум два live-profile:
-  `codex` и `claude`, либо явно зафиксировано поэтапное включение с одним из
-  них в статусе MVP
+- есть хотя бы один локальный `live`-сценарий для реального агента `claude`
+- `claude` / Sonnet зафиксирован как default live path
+- `codex` поддержан как дополнительный live-profile или явно вынесен в
+  follow-up
 - результаты можно воспроизвести повторным запуском на той же машине
 - ошибки preflight, sandbox startup и assertion failure различимы по статусу и
   диагностике
@@ -36,6 +39,8 @@ Feature считается готовой, если:
 - sandbox побочные эффекты не должны писать в рабочее дерево пользователя
 - live-режим использует реальные локальные agent settings, но только через
   explicit bridge
+- explicit bridge использует именно host-level настройки и credentials
+  запущенного test suite
 - тестовая платформа не подменяет `launch-agent.sh` отдельным искусственным
   runner-скриптом
 - любой verdict должен сопровождаться artifact bundle
@@ -67,6 +72,7 @@ Feature считается готовой, если:
 
 - пользователь запускает локальный live-сценарий с `claude`
 - sandbox получает allowlisted настройки для `claude`
+- по умолчанию используется профиль Claude Code с моделью класса Sonnet
 - orchestration path совпадает с `codex`-сценарием до точки выбора agent
   profile
 

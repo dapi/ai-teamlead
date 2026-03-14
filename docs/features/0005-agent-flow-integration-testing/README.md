@@ -15,9 +15,10 @@ flow end-to-end.
 
 - с единым локальным entrypoint
 - с disposable sandbox, не использующим host `zellij`
-- с поддержкой реальных агентов `codex` и `claude`
-- с использованием project-local и user-local настроек подключения к LLM через
-  явный allowlist
+- с приоритетной поддержкой реального `claude` и дополнительной поддержкой
+  `codex`
+- с использованием тех же host-level настроек, credentials и параметров
+  подключения к LLM, с которыми запущен сам test suite, через явный allowlist
 
 ## Что строим
 
