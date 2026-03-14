@@ -371,23 +371,12 @@ fn run_sandbox_container(
         .to_string_lossy()
         .to_string();
     let container_binary_path = format!("/input/ai-teamlead-bin/{binary_name}");
-    let container_home = "/root";
+    let container_home = "/tmp/ai-teamlead-agent-flow-workspace/home";
     let live_agent_mounts = resolve_container_mounts(plan.agent, &plan.preflight.mounted_paths);
     let agent_binary_mount = resolve_agent_binary_mount(plan)?;
-    let container_agent_binary_path = match (
-        agent_binary_mount.as_ref(),
-        plan.preflight.binary_path.as_deref(),
-    ) {
-        (Some(mount), Some(binary_path)) => {
-            let binary_name = binary_path
-                .file_name()
-                .ok_or_else(|| anyhow!("failed to resolve live agent binary file name"))?
-                .to_string_lossy()
-                .to_string();
-            Some(format!("{}/{}", mount.container_path, binary_name))
-        }
-        _ => None,
-    };
+    let container_agent_binary_path = agent_binary_mount
+        .as_ref()
+        .map(|(_, container_binary_path)| container_binary_path.clone());
     let script = sandbox_entrypoint_script(
         plan,
         &container_binary_path,
@@ -413,7 +402,7 @@ fn run_sandbox_container(
     args.push(artifacts_mount);
     args.push("-v".to_string());
     args.push(binary_dir_mount);
-    if let Some(mount) = agent_binary_mount.as_ref() {
+    if let Some((mount, _)) = agent_binary_mount.as_ref() {
         args.push("-v".to_string());
         args.push(format!(
             "{}:{}:ro",
@@ -508,20 +497,57 @@ fn validate_scenario_fixtures(
     Ok(())
 }
 
-fn resolve_agent_binary_mount(plan: &AgentFlowTestPlan) -> Result<Option<ContainerMount>> {
+fn resolve_agent_binary_mount(
+    plan: &AgentFlowTestPlan,
+) -> Result<Option<(ContainerMount, String)>> {
     let Some(binary_path) = plan.preflight.binary_path.as_deref() else {
         return Ok(None);
     };
-    let host_dir = binary_path.parent().ok_or_else(|| {
+    let binary_parent = binary_path.parent().ok_or_else(|| {
         anyhow!(
             "failed to resolve parent directory for live agent binary {}",
             binary_path.display()
         )
     })?;
-    Ok(Some(ContainerMount {
-        host_path: host_dir.to_path_buf(),
-        container_path: "/input/agent-bin".to_string(),
-    }))
+    let mount_root = match fs::read_link(binary_path) {
+        Ok(link_target) => {
+            let resolved_target = if link_target.is_absolute() {
+                link_target
+            } else {
+                binary_parent.join(link_target)
+            };
+            let resolved_target = fs::canonicalize(&resolved_target).with_context(|| {
+                format!(
+                    "failed to canonicalize live agent binary symlink target for {}",
+                    binary_path.display()
+                )
+            })?;
+            let mount_root = binary_parent
+                .parent()
+                .filter(|candidate| resolved_target.starts_with(candidate))
+                .unwrap_or(binary_parent);
+            mount_root.to_path_buf()
+        }
+        Err(_) => binary_parent.to_path_buf(),
+    };
+    let relative_binary_path = binary_path
+        .strip_prefix(&mount_root)
+        .map_err(|_| {
+            anyhow!(
+                "live agent binary {} is not inside mount root {}",
+                binary_path.display(),
+                mount_root.display()
+            )
+        })?
+        .to_string_lossy()
+        .to_string();
+    Ok(Some((
+        ContainerMount {
+            host_path: mount_root,
+            container_path: "/input/agent-root".to_string(),
+        },
+        format!("/input/agent-root/{relative_binary_path}"),
+    )))
 }
 
 fn resolve_container_mounts(
@@ -548,7 +574,7 @@ fn map_container_mount_path(agent: AgentFlowAgent, host_path: &Path) -> Option<S
             if value.ends_with("/.codex")
                 || host_path.file_name().and_then(|v| v.to_str()) == Some(".codex")
             {
-                Some("/root/.codex".to_string())
+                Some("/input/live-home/.codex".to_string())
             } else {
                 None
             }
@@ -557,9 +583,9 @@ fn map_container_mount_path(agent: AgentFlowAgent, host_path: &Path) -> Option<S
             if value.ends_with("/.claude")
                 || host_path.file_name().and_then(|v| v.to_str()) == Some(".claude")
             {
-                Some("/root/.claude".to_string())
+                Some("/input/live-home/.claude".to_string())
             } else if value.ends_with("/.config/claude") {
-                Some("/root/.config/claude".to_string())
+                Some("/input/live-home/.config/claude".to_string())
             } else {
                 None
             }
@@ -679,6 +705,32 @@ STUB_OUT_DIR="/artifacts/stub-out"
 COMMANDS_DIR="/artifacts/commands"
 mkdir -p /artifacts "$COMMANDS_DIR"
 mkdir -p "$(dirname "$WORKSPACE_ROOT")"
+export HOME="#,
+    );
+    script.push_str(&shell_single_quote(container_home_dir));
+    script.push_str(
+        r#"
+mkdir -p "$HOME"
+"#,
+    );
+    match plan.agent {
+        AgentFlowAgent::Codex => {
+            script.push_str(
+                "if [[ -d /input/live-home/.codex && ! -e \"$HOME/.codex\" ]]; then cp -a /input/live-home/.codex \"$HOME/.codex\"; fi\n",
+            );
+        }
+        AgentFlowAgent::Claude => {
+            script.push_str(
+                "if [[ -d /input/live-home/.claude && ! -e \"$HOME/.claude\" ]]; then cp -a /input/live-home/.claude \"$HOME/.claude\"; fi\n",
+            );
+            script.push_str(
+                "if [[ -d /input/live-home/.config/claude && ! -e \"$HOME/.config/claude\" ]]; then mkdir -p \"$HOME/.config\" && cp -a /input/live-home/.config/claude \"$HOME/.config/claude\"; fi\n",
+            );
+        }
+        AgentFlowAgent::Stub => {}
+    }
+    script.push_str(
+        r#"
 if touch /input/repo/.agent-flow-write-probe 2>/dev/null; then
   echo "repo mount must be read-only" > /artifacts/read-only-violation.txt
   exit 41
@@ -750,6 +802,7 @@ printf 'docker\n' > /artifacts/sandbox-runtime.txt
     script.push_str("cat > \"$WORKSPACE_BIN/gh\" <<'EOF'\n");
     script.push_str(&gh_stub_script());
     script.push_str("EOF\nchmod +x \"$WORKSPACE_BIN/gh\"\n");
+    script.push_str("ln -sf \"$WORKSPACE_BIN/gh\" /usr/local/bin/gh\n");
     script.push_str("export AI_TEAMLEAD_TEST_GH_LOG=\"/artifacts/gh.log\"\n");
     let _ = writeln!(
         script,
@@ -794,6 +847,9 @@ printf 'docker\n' > /artifacts/sandbox-runtime.txt
             script.push_str(
                 "EOF\nchmod +x \"$WORKSPACE_BIN/codex\"\nln -sf codex \"$WORKSPACE_BIN/claude\"\n",
             );
+            script.push_str("ln -sf \"$WORKSPACE_BIN/codex\" /usr/local/bin/codex\n");
+            script.push_str("ln -sf \"$WORKSPACE_BIN/claude\" /usr/local/bin/claude\n");
+            script.push_str("export AI_TEAMLEAD_AGENT_BIN=\"$WORKSPACE_BIN/codex\"\n");
             script.push_str("export AI_TEAMLEAD_STUB_OUT_DIR=\"$STUB_OUT_DIR\"\n");
             script.push_str(
                 "export AI_TEAMLEAD_STUB_AI_TEAMLEAD_BIN=\"$WORKSPACE_BIN/ai-teamlead\"\n",
@@ -813,6 +869,21 @@ printf 'docker\n' > /artifacts/sandbox-runtime.txt
                 "ln -sf {} \"$WORKSPACE_BIN/{}\"",
                 shell_single_quote(container_agent_binary_path),
                 live_binary_name
+            );
+            let _ = writeln!(
+                script,
+                "ln -sf \"$WORKSPACE_BIN/{0}\" \"/usr/local/bin/{0}\"",
+                live_binary_name
+            );
+            let _ = writeln!(
+                script,
+                "export AI_TEAMLEAD_AGENT_BIN=\"$WORKSPACE_BIN/{}\"",
+                live_binary_name
+            );
+            let _ = writeln!(
+                script,
+                "export PATH=\"$(dirname {})${{PATH:+:$PATH}}\"",
+                shell_single_quote(container_agent_binary_path)
             );
         }
         _ => {
@@ -1669,12 +1740,24 @@ commands:
         let git_dir = temp.path().join("git");
         let common_git_dir = temp.path().join("common-git");
         let fake_binary = temp.path().join("ai-teamlead");
-        let agent_bin_dir = temp.path().join("agent-bin");
+        let install_root = temp.path().join("node-install");
+        let agent_bin_dir = install_root.join("bin");
+        let agent_lib_dir = install_root.join("lib/node_modules/@openai/codex/bin");
         let agent_binary = agent_bin_dir.join("codex");
         let codex_home = temp.path().join(".codex");
         fs::create_dir_all(&agent_bin_dir).expect("agent bin dir");
+        fs::create_dir_all(&agent_lib_dir).expect("agent lib dir");
         fs::create_dir_all(&codex_home).expect("codex home");
         fs::write(&fake_binary, "#!/usr/bin/env bash\n").expect("binary");
+        fs::write(
+            agent_lib_dir.join("codex.js"),
+            "#!/usr/bin/env node\nconsole.log('codex');\n",
+        )
+        .expect("agent binary target");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("../lib/node_modules/@openai/codex/bin/codex.js", &agent_binary)
+            .expect("agent binary symlink");
+        #[cfg(not(unix))]
         fs::write(&agent_binary, "#!/usr/bin/env bash\n").expect("agent binary");
         let shell = RecordingShell::default();
         let plan = AgentFlowTestPlan {
@@ -1720,10 +1803,13 @@ commands:
 
         let command = shell.commands().last().cloned().expect("command");
         assert!(command.contains(&format!(
-            "-v {}:/input/agent-bin:ro",
-            agent_bin_dir.display()
+            "-v {}:/input/agent-root:ro",
+            install_root.display()
         )));
-        assert!(command.contains(&format!("-v {}:/root/.codex:ro", codex_home.display())));
+        assert!(command.contains(&format!(
+            "-v {}:/input/live-home/.codex:ro",
+            codex_home.display()
+        )));
         assert!(command.contains("-e OPENAI_API_KEY"));
     }
 
@@ -1732,7 +1818,7 @@ commands:
         let mapped =
             map_container_mount_path(AgentFlowAgent::Codex, Path::new("/home/test/.codex"))
                 .expect("mount");
-        assert_eq!(mapped, "/root/.codex");
+        assert_eq!(mapped, "/input/live-home/.codex");
     }
 
     #[test]
