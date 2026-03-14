@@ -14,6 +14,7 @@
 - `docs/code-quality.md` задает quality bar и требования к тестам.
 - `docs/documentation-structure.md` задает обязательную структуру документации
   проекта.
+- `docs/documentation-process.md` задает процесс работы с документацией.
 - `docs/issue-analysis-flow.md` является отдельным SSOT для flow анализа issue.
 - Значимые решения по продукту, архитектуре, данным, интерфейсам и runtime
   должны оформляться отдельными ADR с номером.
