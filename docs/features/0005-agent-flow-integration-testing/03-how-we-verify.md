@@ -41,7 +41,8 @@ Feature считается готовой, если:
 
 - host-окружение пользователя не является execution surface для `zellij`-tests
 - versioned scenario manifest является источником истины для test intent
-- sandbox побочные эффекты не должны писать в рабочее дерево пользователя
+- sandbox побочные эффекты не должны писать в рабочее дерево пользователя;
+  host repo используется только как read-only input mount
 - live-режим использует реальные локальные agent settings, но только через
   explicit bridge
 - explicit bridge использует именно host-level настройки, credentials и
@@ -102,9 +103,9 @@ Feature считается готовой, если:
 ### Сценарий 7. Текущий проект с локальными изменениями
 
 - в текущем working tree есть локальные изменения flow или launcher
-- sandbox видит эти изменения через volume mount текущего проекта
-- runner явно диагностирует любые побочные эффекты внутри смонтированного
-  проекта
+- sandbox видит эти изменения через read-only volume mount текущего проекта
+- runner создает отдельный writable workspace внутри контейнера
+- host repo остается неизменным после завершения теста
 
 ### Сценарий 8. Падение assertions
 

@@ -35,6 +35,10 @@ flow end-to-end.
 
 - [03-how-we-verify.md](./03-how-we-verify.md)
 
+## План реализации
+
+- [04-implementation-plan.md](./04-implementation-plan.md)
+
 ## Зависимости
 
 - [Feature 0001](../0001-ai-teamlead-daemon/README.md) — основной CLI и runtime
@@ -52,8 +56,6 @@ flow end-to-end.
 
 ## Открытые вопросы
 
-- нужен ли отдельный CLI namespace `test` или достаточно подкоманды в
-  существующем verification path
 - нужно ли отдельно ограничивать budget, timeout и максимальное число LLM
   вызовов на сценарий
 

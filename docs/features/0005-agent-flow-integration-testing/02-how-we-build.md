@@ -26,16 +26,18 @@
 
 1. host CLI читает `./.ai-teamlead/settings.yml`
 2. host CLI читает versioned scenario manifest
-3. host CLI собирает sandbox и монтирует текущий проект и allowlisted
-   host-level files через volumes
-4. sandbox запускает `ai-teamlead` entrypoint
-5. `ai-teamlead` проходит обычный launcher/orchestration path
-6. выбранный agent profile (`stub`, `codex`, `claude`) отрабатывает внутри того
+3. host CLI собирает sandbox и монтирует текущий проект read-only и
+   allowlisted host-level files через volumes
+4. sandbox materialize-ит writable workspace внутри контейнера из смонтированного
+   проекта
+5. sandbox запускает `ai-teamlead` entrypoint
+6. `ai-teamlead` проходит обычный launcher/orchestration path
+7. выбранный agent profile (`stub`, `codex`, `claude`) отрабатывает внутри того
    же sandbox
-7. все обращения `ai-teamlead` к GitHub проходят через `gh` stub и пишутся в
+8. все обращения `ai-teamlead` к GitHub проходят через `gh` stub и пишутся в
    invocation log
-8. runner выполняет assertions
-9. artifact collector сохраняет результат вне sandbox
+9. runner выполняет assertions
+10. artifact collector сохраняет результат вне sandbox
 
 ## Границы sandbox
 
@@ -44,9 +46,11 @@ execution surface.
 
 ### Sandbox имеет доступ к
 
-- текущему проекту внутри контейнера
+- текущему проекту внутри контейнера через read-only volume mount
 - `~/.codex`, `~/.claude` и другим нужным для выбранного agent profile
   host-level config/auth файлам, смонтированным через явный allowlist volumes
+- writable workspace внутри контейнера, созданному runner-ом из read-only
+  project mount
 - sandbox-local temporary directories и runtime-artifacts
 - export-каталогу артефактов, заранее выделенному runner-ом
 - встроенному `gh` stub вместо реального `gh`
@@ -74,7 +78,8 @@ execution surface.
 - `sandbox`
   Disposable container runtime и его filesystem.
 - `workspace snapshot`
-  Текущий проект, смонтированный в sandbox через Docker volume.
+  Writable sandbox workspace, созданный внутри контейнера из read-only mount
+  текущего проекта.
 - `agent profile`
   Набор правил, как запускать `stub`, `codex` или `claude`.
 - `artifact bundle`
@@ -113,11 +118,13 @@ execution surface.
 актуальное состояние текущего проекта, а не только последний commit.
 Предпочтительный контракт:
 
-- sandbox получает текущий working tree через volume mount
+- sandbox получает текущий working tree через read-only volume mount
 - дополнительные host-level agent files (`~/.codex`, `~/.claude` и другие
   allowlisted paths) также пробрасываются через volumes
-- runner должен явно контролировать и диагностировать любые побочные эффекты
-  внутри смонтированного проекта
+- runner materialize-ит из read-only mount отдельный writable workspace внутри
+  контейнера
+- все git/runtime побочные эффекты пишутся только во внутренний sandbox
+  workspace, а не в host repo
 
 ## Интерфейсы
 
@@ -150,6 +157,7 @@ ai-teamlead test agent-flow \
 - `--mode stub` разрешает только `--agent stub`
 - `--mode live` разрешает `codex` и `claude`
 - если `--agent` не задан, default live profile = `codex`
+- канонический namespace первой версии: `ai-teamlead test agent-flow`
 - итоговый exit code отражает verdict сценария
 
 ### Scenario manifest
@@ -254,6 +262,8 @@ GitHub слой для integration tests должен реализовывать
 - Default live path для локального тестирования: `codex`.
 - `claude` поддерживается как дополнительный live-profile, в том числе для
   Claude Code с моделью класса Sonnet.
+- Текущий проект монтируется в sandbox read-only; writable execution path живет
+  во внутреннем sandbox workspace.
 - GitHub integration в sandbox всегда проходит через `gh` stub и invocation log.
 - Вердикт сценария считается по assertions, а не по одному exit code процесса.
 - Артефакты должны собираться вне зависимости от `passed` или `failed`.
