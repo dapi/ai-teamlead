@@ -15,6 +15,11 @@
    добавляется отдельным действием после старта session.
 6. Ошибки создания session или добавления analysis tab не скрываются и дают
    диагностируемое сообщение.
+7. Generated `launch-layout.kdl` не принудительно задает `close_on_exit false`,
+   а использует обычное поведение `zellij` после завершения команды в pane.
+8. Analysis tab выглядит как родной tab выбранной session и не деградирует до
+   bare launcher-tab, если для проекта зафиксированы `compact bar`, плагины или
+   другие tab-level UX-элементы.
 
 ## Ready Criteria
 
@@ -24,13 +29,19 @@
   verification-сценарии;
 - путь `session exists` остается обратно совместимым;
 - для `session missing` определен один проверяемый fallback-path без
-  generated layout на старте session.
+  generated layout на старте session;
+- для analysis tab явно зафиксирован source of truth для tab-level UX:
+  template, versioned layout contract или другой проверяемый артефакт.
 
 ## Invariants
 
 - `zellij.layout` остается опциональным repo-level полем в `settings.yml`;
 - generated `launch-layout.kdl` продолжает отвечать только за analysis tab, а
   не за базовую session при `layout = None`;
+- generated layout не навязывает keep-pane-open поведение после завершения
+  команды;
+- внешний вид analysis tab не должен зависеть от неявной попытки "унаследовать"
+  live-state существующей session;
 - existing session по-прежнему использует path добавления analysis tab без
   пересоздания session;
 - ошибки `zellij` локализуются по шагам `create session` и `add analysis tab`.
@@ -41,7 +52,7 @@
    миграций.
 2. Launcher видит, что session отсутствует.
 3. Launcher создает session с пользовательским layout.
-4. Launcher добавляет analysis tab из `launch-layout.kdl`.
+4. Launcher добавляет analysis tab из versioned tab-layout контракта.
 5. `launch-agent.sh` стартует внутри analysis pane как и раньше.
 
 ## Edge Cases
@@ -51,6 +62,8 @@
 - Session между проверкой `list-sessions` и запуском успевает появиться.
 - Базовая session создается успешно, но добавление analysis tab завершается
   ошибкой.
+- Versioned tab-layout contract для analysis tab отсутствует или не содержит
+  ожидаемые tab-level UX-элементы.
 
 ## Test Plan
 
@@ -65,6 +78,9 @@ Unit tests:
 - launcher для `session exists` сохраняет прежнюю команду добавления tab;
 - если логика будет разложена на несколько шагов, проверить порядок вызовов:
   сначала base session, потом analysis tab.
+- рендер analysis-tab layout подставляет `tab_name` и путь к
+  `pane-entrypoint.sh`, не теряя versioned tab-level UX-элементы вроде
+  `compact bar` или plugins, если они зафиксированы в контракте.
 
 Integration / smoke:
 
@@ -73,7 +89,9 @@ Integration / smoke:
 - живой прогон без `layout` и проверкой, что session стартует с нормальным
   fallback-path без `-n <generated layout>` на старте session;
 - регрессия существующего integration flow вокруг `internal launch-zellij-fixture`
-  и binding `pane_id/tab_id`.
+  и binding `pane_id/tab_id`;
+- smoke-проверка analysis tab подтверждает, что tab не выглядит как голая
+  техническая вкладка, если проектный contract ожидает bar/plugins.
 
 ## Verification Checklist
 
@@ -82,6 +100,9 @@ Integration / smoke:
 - `cargo test` проходит для unit-тестов `config` и `zellij`;
 - при запуске без `layout` команда создания session не использует
   `-n <generated layout>`;
+- `launch-layout.kdl` не содержит `close_on_exit false`;
+- runtime layout для analysis tab содержит ожидаемые project-local tab-level
+  элементы, если они зафиксированы в versioned contract;
 - при ручном запуске с `layout` пользователь видит свой layout и отдельный
   analysis tab;
 - runtime-артефакты `pane-entrypoint.sh` и `launch-layout.kdl` продолжают
@@ -94,6 +115,8 @@ Integration / smoke:
 - Session поднялась, но analysis tab не добавился: ошибка должна быть явной,
   чтобы оператор мог повторить запуск и не потерять диагностику.
 - Сломан fallback без `layout`: smoke-проверка должна выявить возврат к bare UX.
+- Analysis tab создался, но потерял bar/plugins/родной UX: это считается
+  продуктовой регрессией, даже если launcher формально открыл новый tab.
 
 ## Observability
 
@@ -102,5 +125,7 @@ Integration / smoke:
   добавление analysis tab.
 - В логах launcher должно быть различимо, по какому path пошел запуск:
   `existing session`, `custom layout`, `default fallback`.
+- Для анализа tab должно быть видно, из какого versioned layout contract он был
+  собран.
 - Для ручной отладки остаются runtime-артефакты в `.git/.ai-teamlead/sessions`
   и manifest binding с `session_id`, `tab_id`, `pane_id`.

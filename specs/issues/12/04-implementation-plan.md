@@ -7,6 +7,8 @@
 
 Этот план задает порядок реализации поддержки `zellij.layout` и нового
 fallback-path для создания новой `zellij` session без bare generated layout.
+Дополнительно план фиксирует, что analysis tab должен выглядеть как родной tab
+текущей session, а не как минимальная техническая вкладка.
 
 ## Scope
 
@@ -15,6 +17,7 @@ fallback-path для создания новой `zellij` session без bare ge
 - добавить `zellij.layout` в versioned config contract;
 - изменить launcher path для `session missing`;
 - сохранить behavior для `session exists`;
+- зафиксировать versioned source of truth для внешнего вида analysis tab;
 - обновить template `settings.yml`;
 - добавить unit и smoke coverage;
 - синхронизировать issue-спеку, feature 0003 и ADR.
@@ -23,7 +26,9 @@ fallback-path для создания новой `zellij` session без bare ge
 
 - поддержка пути к `.kdl` файлу;
 - redesign launcher под разные launch target modes;
-- изменение session/tab naming contract.
+- изменение session/tab naming contract;
+- автоматическое восстановление tab-layout из live-state уже запущенной
+  session.
 
 ## Связанные документы
 
@@ -43,6 +48,8 @@ fallback-path для создания новой `zellij` session без bare ge
   session-scoped `action new-tab --layout`;
 - существующий path `session exists` уже стабилизирован и не должен менять
   observable behavior;
+- contract внешнего вида analysis tab должен быть versioned и проверяемым, а не
+  неявно вытекать из runtime-состояния session;
 - реализация должна оставаться обратно совместимой для старых `settings.yml`.
 
 ## Порядок работ
@@ -91,7 +98,33 @@ fallback-path для создания новой `zellij` session без bare ge
 - unit-тесты команд для трех веток:
   `existing session`, `custom layout`, `default fallback`.
 
-### Этап 3. Диагностика и errors
+### Этап 3. Tab-layout contract для analysis tab
+
+Цель:
+
+- определить проверяемый source of truth для внешнего вида analysis tab;
+- исключить hardcoded bare-layout как финальный product contract;
+- зафиксировать, где задаются `compact bar`, плагины и другие tab-level
+  элементы, если проект их ожидает.
+
+Основание:
+
+- заказчик требует, чтобы analysis tab выглядел как родной tab текущей
+  session;
+- minimal generated layout этого не гарантирует.
+
+Результат этапа:
+
+- у analysis tab есть versioned layout contract или template;
+- launcher рендерит runtime layout из этого contract;
+- unit/smoke-проверки могут различить "родной tab" и технический bare-tab.
+
+Проверка:
+
+- unit-тесты на рендер contract/template;
+- smoke-проверка на наличие ожидаемых tab-level UX-элементов.
+
+### Этап 4. Диагностика и errors
 
 Цель:
 
@@ -111,7 +144,7 @@ fallback-path для создания новой `zellij` session без bare ge
 
 - unit-тесты или assertions на сообщения ошибок и вызванные команды.
 
-### Этап 4. Regression и smoke
+### Этап 5. Regression и smoke
 
 Цель:
 
@@ -140,6 +173,8 @@ Issue можно считать реализованной, если:
 - `zellij.layout` добавлен без регрессии старых конфигов;
 - path `session missing` больше не использует bare generated layout как базовую
   session при `layout = None`;
+- analysis tab использует versioned tab-layout contract и выглядит как родной
+  tab session в рамках этого контракта;
 - `layout = Some(name)` и `layout = None` покрыты тестами;
 - issue, feature-спека и ADR синхронизированы.
 
@@ -149,6 +184,8 @@ Issue можно считать реализованной, если:
   `action new-tab`;
 - smoke на “default UX” нельзя сводить к визуальной оценке, поэтому опорным
   контрактом остается форма команд и launcher path;
+- попытка "унаследовать" layout из живой session без явного template/contract
+  останется хрупкой и version-sensitive;
 - если выяснится, что `zellij` не поддерживает нужный attach-path стабильно,
   придется заводить follow-up issue, а не расширять scope этой задачи.
 

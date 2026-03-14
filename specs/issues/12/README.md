@@ -25,6 +25,14 @@ Issue: `zellij: опциональный layout при создании сесс
 стартовать либо с пользовательским layout, либо с нормальным built-in default
 UX, а analysis tab продолжает добавляться автоматически.
 
+Дополнительное обязательное требование заказчика:
+
+- analysis tab должна выглядеть как родной tab текущей session, а не как
+  отдельная минимальная техническая вкладка;
+- если в session/layout используются `compact bar`, плагины или другие
+  versioned UX-элементы tab, analysis tab не должна молча терять этот
+  контракт.
+
 ## Артефакты
 
 ## Что строим
@@ -58,5 +66,14 @@ UX, а analysis tab продолжает добавляться автомати
 
 - `zellij.layout` принимает только строковое имя layout;
 - если поле отсутствует, новая session создается без bare generated layout;
-- analysis tab продолжает добавляться отдельно через generated layout;
+- analysis tab должна собираться из versioned tab-layout контракта, а не из
+  голого минимального runtime layout, если нужно сохранить "родной" UX session;
 - решение зафиксировано отдельным ADR, а не только issue-спекой.
+
+Отдельно зафиксировано ограничение текущего минимального дизайна:
+
+- hardcoded generated layout с одним tab и одним pane сам по себе не
+  гарантирует, что analysis tab будет выглядеть как родной tab выбранной
+  session;
+- для этого нужен явный source of truth для tab-level UX, например
+  project-local template или другой versioned layout contract.

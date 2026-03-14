@@ -29,6 +29,8 @@
 - запускается versioned `./.ai-teamlead/launch-agent.sh`
 - именно `launch-agent.sh` делает branch/worktree/init/agent start
 - реальный агент стартует только после подготовки analysis worktree
+- analysis tab выглядит как родной tab выбранной `zellij` session, а не как
+  минимальная техническая вкладка launcher'а
 
 ## Scope
 
@@ -40,6 +42,7 @@
 - session binding с сохранением `pane_id`
 - правила поведения при corner cases для session/tab
 - минимальный lifecycle вокруг analysis branch/worktree
+- versioned contract для внешнего вида analysis tab
 
 ## Вне scope
 
@@ -54,3 +57,5 @@
 - `issue-analysis-flow` остается отдельным prompt-файлом
 - `launch-agent.sh` исполняется из корня репозитория
 - `launch-agent.sh` получает первым аргументом `session_uuid`, вторым `issue_url`
+- внешний вид analysis tab должен задаваться явным contract-level способом, а
+  не неявной попыткой восстановить live-state session

@@ -6,13 +6,18 @@
 перестройки orchestration flow:
 
 1. Расширить `ZellijConfig` новым полем `layout: Option<String>`.
-2. Сохранить генерацию `launch-layout.kdl` для analysis pane как отдельного
-   runtime-артефакта.
+2. Сохранить отдельный runtime-артефакт для analysis tab, но перестать считать
+   hardcoded минимальный `launch-layout.kdl` достаточным продуктовым
+   контрактом.
 3. Разделить логику запуска новой session и логику добавления analysis tab:
    новая session создается либо пользовательским layout, либо обычным default
    UX `zellij`, а analysis tab подключается отдельным действием.
 4. Для уже существующей session оставить текущую модель "добавить tab через
    generated layout".
+5. Зафиксировать source of truth для внешнего вида analysis tab: tab должен
+   восприниматься как родной для текущей session, включая versioned tab-level
+   UX-элементы вроде `compact bar` и плагинов, если они являются частью
+   выбранного контракта.
 
 ## Affected Areas
 
@@ -42,8 +47,18 @@ zellij:
   session и должен сохранить обычный default UX `zellij`;
 - `Some(name)`: launcher создает новую session через именованный layout
   `zellij`;
-- analysis tab во всех случаях продолжает собираться из сгенерированного
-  `launch-layout.kdl`.
+- analysis tab во всех случаях продолжает добавляться отдельным действием, но
+  ее layout должен рендериться из versioned tab-layout контракта, а не из
+  неявного минимального bare-layout по умолчанию.
+
+Дополнительный UX-контракт:
+
+- analysis tab должна выглядеть как родной tab текущей session;
+- отсутствие stable API для чтения layout живой session не позволяет надежно
+  "унаследовать" runtime layout постфактум;
+- поэтому внешний вид analysis tab должен определяться явным versioned
+  источником, например project-local template, а не попыткой сериализовать
+  текущее состояние session обратно в KDL.
 
 Ожидаемая матрица поведения:
 
@@ -55,6 +70,14 @@ zellij:
 3. `session missing` + `zellij.layout = None`
    сначала создать session с нормальным built-in UX `zellij`, затем добавить
    analysis tab через generated layout
+
+Предпочтительное направление для analysis tab:
+
+- базовая session наследует user/default layout обычным путем;
+- analysis tab использует versioned template с подстановкой `tab_name` и пути к
+  `pane-entrypoint.sh`;
+- если проекту нужны `compact bar`, плагины и другие tab-level элементы, они
+  описываются в этом template явно.
 
 Точная CLI-форма для шага "добавить analysis tab в уже запущенную session"
 должна быть подтверждена на версии `zellij`, используемой в проекте. Из issue
@@ -83,6 +106,8 @@ zellij:
   UX вместо штатного default UX.
 - Невалидное имя пользовательского layout должно приводить к явной ошибке, а не
   к тихому запуску в неправильной конфигурации.
+- Минимальный generated layout с одной pane не выполняет требование "analysis
+  tab выглядит как родной tab session", если tab-level UX нигде явно не задан.
 
 ## Architecture Notes
 
@@ -95,6 +120,10 @@ zellij:
 Практически это означает, что `launch_issue_analysis()` стоит разложить на
 небольшие внутренние шаги или builder'ы команд, чтобы unit-тесты проверяли
 ветки `existing session`, `custom layout`, `default fallback` независимо.
+
+Отдельно не стоит проектировать реализацию так, будто можно надежно получить
+"текущий layout session" из runtime-состояния `zellij` и затем восстановить его
+как KDL. Для первой версии это слишком хрупкий и version-sensitive путь.
 
 ## ADR Impact
 
@@ -110,7 +139,8 @@ ADR должен зафиксировать:
 
 - что `zellij.layout` принимает только строковое имя layout;
 - что отсутствие поля означает создание новой session без bare generated layout;
-- что analysis tab по-прежнему добавляется отдельным generated layout;
+- что analysis tab не только добавляется отдельно, но и должна выглядеть как
+  родной tab session согласно отдельному versioned tab-layout контракту;
 - что поддержка пути к `.kdl` и других форматов значения в первую версию не
   входит.
 
@@ -128,6 +158,14 @@ ADR должен зафиксировать:
 Отклонено.
 
 Это противоречит dogfooding finding из issue и не решает потерю default UX.
+
+### Пытаться наследовать analysis tab из уже живой session
+
+Отклонено для первой версии.
+
+У `zellij` нет стабильного contract-level API, которое позволяло бы считать
+текущее runtime-состояние session и безопасно нормализовать его обратно в KDL
+так, чтобы это стало источником истины для нового tab.
 
 ## Migration Or Rollout Notes
 
