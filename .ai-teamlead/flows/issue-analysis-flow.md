@@ -47,3 +47,38 @@
 ## Связанные системные документы
 
 - системный SSOT `docs/issue-analysis-flow.md` из репозитория `ai-teamlead`
+
+## Завершение анализа
+
+Когда анализ завершен, вызови ровно одну команду завершения стадии.
+
+Если SDD-комплект собран и готов к human review:
+
+```bash
+$AI_TEAMLEAD_BIN internal complete-stage "$AI_TEAMLEAD_SESSION_UUID" \
+  --outcome plan-ready \
+  --message "краткое описание результата"
+```
+
+Если для продолжения нужны ответы пользователя:
+
+```bash
+$AI_TEAMLEAD_BIN internal complete-stage "$AI_TEAMLEAD_SESSION_UUID" \
+  --outcome needs-clarification \
+  --message "краткое описание того, что нужно уточнить"
+```
+
+Если анализ заблокирован технической проблемой:
+
+```bash
+$AI_TEAMLEAD_BIN internal complete-stage "$AI_TEAMLEAD_SESSION_UUID" \
+  --outcome blocked \
+  --message "краткая причина блокировки"
+```
+
+Важно:
+
+- не выполняй `git commit`, `git push` и `gh pr create` самостоятельно
+- не меняй статус issue вручную через `gh` из prompt
+- commit title и PR title формируются командой по нотации `analysis(#N): ...`
+- сообщение в `--message` должно быть коротким и содержательным
