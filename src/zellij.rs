@@ -434,7 +434,11 @@ mod tests {
 
         // No script -qfc spawn for existing sessions
         let spawns = shell.spawns.borrow();
-        assert_eq!(spawns.len(), 0, "existing session must not use spawn/script");
+        assert_eq!(
+            spawns.len(),
+            0,
+            "existing session must not use spawn/script"
+        );
 
         // Verify zellij action new-tab was called with correct env
         let calls = shell.run_with_env_calls.borrow();
