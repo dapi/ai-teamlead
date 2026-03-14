@@ -9,6 +9,9 @@ Launcher сейчас всегда создает новую `zellij` session ч
 - новая session стартует без привычного default UX `zellij`;
 - analysis pane становится единственной точкой входа, а вспомогательные pane
   для логов, мониторинга и операционной работы приходится добавлять вручную.
+- analysis tab выглядит как техническая вкладка и может терять `compact bar`,
+  плагины и другие tab-level элементы, которые пользователь ожидает видеть в
+  родной session.
 
 ## Who Is It For
 
@@ -18,13 +21,15 @@ Launcher сейчас всегда создает новую `zellij` session ч
 - session стартует с его project-local или user-local layout;
 - при отсутствии кастомного layout session выглядит как обычный запуск
   `zellij`, а не как минимальная техническая заготовка.
+- analysis tab выглядит как родной tab этой session, а не как отдельный bare
+  launcher-tab.
 
 ## Feature Story
 
 Как пользователь `ai-teamlead`, я хочу задать `zellij.layout` в
 `./.ai-teamlead/settings.yml`, чтобы новая session создавалась с моим layout, а
-analysis tab добавлялся автоматически, не ломая текущий workflow и обратную
-совместимость конфига.
+analysis tab добавлялся автоматически и выглядел как родной tab моей session,
+не ломая текущий workflow и обратную совместимость конфига.
 
 ## Use Cases
 
@@ -36,6 +41,9 @@ analysis tab добавлялся автоматически, не ломая т
    analysis tab появляется как дополнительная рабочая вкладка.
 3. Если session уже существует, `ai-teamlead` не пересоздает ее и продолжает
    добавлять analysis tab в существующий session context.
+4. Если проект ожидает `compact bar`, плагины или другой tab-level UX,
+   analysis tab сохраняет этот контракт и не деградирует до минимального
+   однопанельного launcher layout.
 
 ## Scope
 
@@ -46,6 +54,7 @@ analysis tab добавлялся автоматически, не ломая т
 - новый launch path для случая, когда session еще не существует;
 - fallback на нормальный default UX `zellij`, если `zellij.layout` не задан;
 - отдельное добавление analysis tab после старта новой session;
+- явный контракт, по которому analysis tab выглядит как родной tab session;
 - обновление шаблона `templates/init/settings.yml`;
 - тесты на оба сценария запуска: с layout и без layout.
 
@@ -56,6 +65,8 @@ analysis tab добавлялся автоматически, не ломая т
 - поддержка отдельного типа значения для пути к `.kdl` файлу;
 - редизайн поведения для уже существующей session;
 - управление содержимым пользовательского layout или его валидация до запуска;
+- автоматическое извлечение layout из уже живой `zellij` session и обратная
+  сериализация ее состояния в KDL;
 - восстановление session/tab после падения `zellij`;
 - расширение project-local конфига другими режимами запуска.
 
@@ -65,7 +76,9 @@ analysis tab добавлялся автоматически, не ломая т
 - Поле `zellij.layout` должно быть действительно опциональным на уровне YAML и
   Rust-модели.
 - Analysis tab должен по-прежнему запускать `./.ai-teamlead/launch-agent.sh`
-  через сгенерированный `launch-layout.kdl`.
+  через runtime-generated layout, но минимальный hardcoded `launch-layout.kdl`
+  больше не считается достаточным продуктовым результатом, если он не
+  сохраняет родной UX tab.
 - Для существующей session нельзя сломать текущий сценарий добавления tab через
   сгенерированный layout.
 
@@ -73,4 +86,5 @@ analysis tab добавлялся автоматически, не ломая т
 
 - CLI-контракт `zellij` для создания новой session с именованным layout.
 - CLI-контракт `zellij` для добавления нового tab в уже запущенную session.
+- Versioned source of truth для tab-level UX analysis tab.
 - Текущее shell-abstraction и unit-тесты в `src/zellij.rs`.

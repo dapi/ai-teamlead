@@ -83,7 +83,7 @@ exec {quoted_launch_agent} {quoted_session_uuid} {quoted_issue_url}\n"
         }
 
         let layout = format!(
-            "layout {{\n  tab name=\"{}\" {{\n    pane command=\"bash\" {{\n      args \"{}\"\n      close_on_exit false\n    }}\n  }}\n}}\n",
+            "layout {{\n  tab name=\"{}\" {{\n    pane command=\"bash\" {{\n      args \"{}\"\n    }}\n  }}\n}}\n",
             escape_kdl_string(&zellij.tab_name),
             escape_kdl_string(entrypoint_path.to_string_lossy().as_ref()),
         );
@@ -875,7 +875,7 @@ mod tests {
     }
 
     #[test]
-    fn layout_includes_close_on_exit_false() {
+    fn layout_does_not_force_close_on_exit_false() {
         let temp = tempdir().expect("temp dir");
         let repo_root = temp.path().join("repo");
         let git_dir = repo_root.join(".git");
@@ -923,8 +923,8 @@ mod tests {
         )
         .expect("layout file");
         assert!(
-            layout_content.contains("close_on_exit false"),
-            "layout must include close_on_exit false to keep pane alive after agent exits, got: {}",
+            !layout_content.contains("close_on_exit false"),
+            "layout must not force close_on_exit false; pane should use default exit behavior, got: {}",
             layout_content
         );
     }

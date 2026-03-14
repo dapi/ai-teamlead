@@ -69,6 +69,8 @@ Runtime правила:
     поле отсутствует
 - если нужный tab существует, используется он
 - если нужного tab нет, `ai-teamlead` создает его
+- analysis tab не должна выглядеть как bare technical tab, если project-local
+  contract ожидает bar/plugins и другой tab-level UX
 - для каждого запуска issue-analysis открывается новая pane
 - existing session с panes из другого GitHub repo считается недопустимой
   и отклоняется до запуска
@@ -175,6 +177,8 @@ Bootstrap default для первой версии:
   задается через `cwd`
 - runtime может генерировать только технический shim `pane-entrypoint.sh` и
   `launch-layout.kdl`, но не несет в них branch/worktree логику
+- если `launch-layout.kdl` используется для analysis tab, его source of truth
+  должен быть versioned contract/template, а не hardcoded bare layout
 
 ## Направление эволюции
 
@@ -231,3 +235,13 @@ launch_agent:
 - любые оставшиеся `${...}` считаются ошибкой конфигурации
 - полученное значение используется как fallback, если нет CLI override и
   `ZELLIJ_SESSION_NAME`
+
+## Ограничение минимального generated layout
+
+Минимальный runtime-generated layout удобен как атомарный transport для
+`tab + pane + command`, но он не гарантирует продуктовое требование
+"analysis tab выглядит как родной tab session".
+
+Поэтому для analysis tab нужен отдельный versioned source of truth для
+tab-level UX. Попытка восстановить такой UX из live-state уже открытой session
+считается хрупкой и не входит в контракт первой версии.
