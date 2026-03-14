@@ -1,10 +1,11 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 
 use crate::config::{Config, FlowStatuses};
-use crate::github::GhProjectClient;
-use crate::runtime::RuntimeLayout;
+use crate::github::{GhProjectClient, ProjectIssueItem};
+use crate::runtime::{RuntimeLayout, SessionManifest};
 use crate::shell::Shell;
 
 #[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
@@ -32,6 +33,16 @@ impl StageOutcome {
     }
 }
 
+#[derive(Debug, Clone)]
+struct ExecutionContext {
+    repo_root: PathBuf,
+    worktree_root: PathBuf,
+    branch: String,
+    artifacts_dir: String,
+    message: String,
+    outcome: StageOutcome,
+}
+
 pub fn run_complete_stage(
     shell: &dyn Shell,
     session_uuid: &str,
@@ -39,59 +50,93 @@ pub fn run_complete_stage(
     message: &str,
 ) -> Result<()> {
     let repo_root = resolve_repo_root(shell)?;
-    let config = Config::load_from_repo_root(&repo_root)?;
-    let runtime = RuntimeLayout::from_repo_root(&repo_root);
+    let worktree_root = resolve_worktree_root()?;
+    let context = ExecutionContext {
+        repo_root,
+        worktree_root,
+        branch: std::env::var("AI_TEAMLEAD_ANALYSIS_BRANCH")
+            .unwrap_or_else(|_| "analysis/issue-unknown".to_string()),
+        artifacts_dir: std::env::var("AI_TEAMLEAD_ANALYSIS_ARTIFACTS_DIR")
+            .unwrap_or_else(|_| "specs/issues".to_string()),
+        message: message.trim().to_string(),
+        outcome: outcome.clone(),
+    };
+    execute_complete_stage(shell, session_uuid, context)
+}
 
+fn execute_complete_stage(
+    shell: &dyn Shell,
+    session_uuid: &str,
+    context: ExecutionContext,
+) -> Result<()> {
+    if context.message.is_empty() {
+        bail!("complete-stage requires a non-empty --message");
+    }
+
+    let config = Config::load_from_repo_root(&context.repo_root)?;
+    let runtime = RuntimeLayout::from_repo_root(&context.repo_root);
     let manifest = runtime
         .load_session_manifest(session_uuid)?
-        .ok_or_else(|| anyhow::anyhow!("session not found: {session_uuid}"))?;
+        .ok_or_else(|| anyhow!("session not found: {session_uuid}"))?;
 
     if manifest.status == "completed" {
-        eprintln!("warning: session {session_uuid} is already completed, skipping");
+        eprintln!("complete-stage: session {session_uuid} is already completed");
         return Ok(());
     }
 
-    let issue_number = manifest.issue_number;
-    let worktree_root = resolve_worktree_root()?;
-    let artifacts_dir = std::env::var("AI_TEAMLEAD_ANALYSIS_ARTIFACTS_DIR")
-        .unwrap_or_else(|_| format!("specs/issues/{issue_number}"));
-    let branch = std::env::var("AI_TEAMLEAD_ANALYSIS_BRANCH")
-        .unwrap_or_else(|_| format!("analysis/issue-{issue_number}"));
+    let branch = if context.branch == "analysis/issue-unknown" {
+        format!("analysis/issue-{}", manifest.issue_number)
+    } else {
+        context.branch.clone()
+    };
+    let artifacts_dir = if context.artifacts_dir == "specs/issues" {
+        format!("specs/issues/{}", manifest.issue_number)
+    } else {
+        context.artifacts_dir.clone()
+    };
+    let commit_title = format!("analysis(#{}): {}", manifest.issue_number, context.message);
 
-    let commit_message = format!("analysis(#{issue_number}): {message}");
+    let committed =
+        git_add_and_commit(shell, &context.worktree_root, &artifacts_dir, &commit_title)?;
 
-    // Step 1: git add + commit (if there are changes)
-    let committed = git_add_and_commit(shell, &worktree_root, &artifacts_dir, &commit_message)?;
-
-    // Step 2: git push
     if committed {
-        git_push(shell, &worktree_root, &branch)?;
+        git_push(shell, &context.worktree_root, &branch)?;
     }
 
-    // Step 3: create draft PR (only for plan-ready)
-    if matches!(outcome, StageOutcome::PlanReady) && committed {
-        let pr_title = format!("analysis(#{issue_number}): {message}");
-        let pr_body =
-            format!("Ref #{issue_number}\n\nOutcome: plan-ready\nArtifacts: `{artifacts_dir}/`");
-        create_draft_pr_if_needed(shell, &worktree_root, &branch, &pr_title, &pr_body)?;
+    if matches!(context.outcome, StageOutcome::PlanReady) {
+        let issue_url = format!(
+            "https://github.com/{}/{}/issues/{}",
+            manifest.github_owner, manifest.github_repo, manifest.issue_number
+        );
+        let artifact_files = collect_artifact_files(&context.worktree_root, &artifacts_dir)?;
+        let pr_body = build_pr_body(
+            &issue_url,
+            context.outcome.as_str(),
+            &artifacts_dir,
+            &artifact_files,
+        );
+        create_draft_pr_if_needed(
+            shell,
+            &context.worktree_root,
+            &branch,
+            &commit_title,
+            &pr_body,
+        )?;
     }
 
-    // Step 4: update GitHub Project status
-    let target_status = outcome.target_status(&config.issue_analysis_flow.statuses);
-    update_project_status(shell, &repo_root, &config, &manifest, target_status)?;
-
-    // Step 5: update runtime state
-    // Order matters: update_issue_flow_status first, then session status.
-    // session status = "completed" is the idempotency guard — writing it last
-    // ensures retries re-execute all preceding steps.
-    runtime.update_issue_flow_status(issue_number, target_status)?;
+    let target_status = context
+        .outcome
+        .target_status(&config.issue_analysis_flow.statuses);
+    update_project_status(shell, &context.repo_root, &manifest, target_status)?;
+    runtime.update_issue_flow_status(manifest.issue_number, target_status)?;
     runtime.update_session_status(session_uuid, "completed")?;
 
     println!(
-        "complete-stage: issue=#{issue_number} outcome={} status={target_status}",
-        outcome.as_str(),
+        "complete-stage: issue=#{} outcome={} status={}",
+        manifest.issue_number,
+        context.outcome.as_str(),
+        target_status
     );
-
     Ok(())
 }
 
@@ -99,14 +144,14 @@ fn resolve_repo_root(shell: &dyn Shell) -> Result<PathBuf> {
     if let Ok(root) = std::env::var("AI_TEAMLEAD_REPO_ROOT") {
         return Ok(PathBuf::from(root));
     }
-    // Fallback: primary worktree from git
+
     let cwd = std::env::current_dir().context("failed to get cwd")?;
     let output = shell.run(&cwd, "git", &["worktree", "list", "--porcelain"])?;
-    let first_line = output
+    let first_worktree = output
         .lines()
-        .find(|l| l.starts_with("worktree "))
-        .ok_or_else(|| anyhow::anyhow!("cannot determine primary worktree"))?;
-    Ok(PathBuf::from(first_line.strip_prefix("worktree ").unwrap()))
+        .find_map(|line| line.strip_prefix("worktree "))
+        .ok_or_else(|| anyhow!("cannot determine primary repo root from git worktree list"))?;
+    Ok(PathBuf::from(first_worktree))
 }
 
 fn resolve_worktree_root() -> Result<PathBuf> {
@@ -118,47 +163,47 @@ fn resolve_worktree_root() -> Result<PathBuf> {
 
 fn git_add_and_commit(
     shell: &dyn Shell,
-    worktree: &Path,
+    worktree_root: &Path,
     artifacts_dir: &str,
     commit_message: &str,
 ) -> Result<bool> {
-    let artifacts_path = worktree.join(artifacts_dir);
+    let artifacts_path = worktree_root.join(artifacts_dir);
     if !artifacts_path.exists() {
         eprintln!("complete-stage: no artifacts directory at {artifacts_dir}, skipping commit");
         return Ok(false);
     }
 
-    shell.run(worktree, "git", &["add", artifacts_dir])?;
-
-    // Check if there are staged changes.
-    // Using --name-only instead of --quiet: --quiet uses exit code 1 for "has changes"
-    // which shell.run() would interpret as an error, masking real git failures.
-    let staged_files = shell.run(worktree, "git", &["diff", "--cached", "--name-only"])?;
-    if staged_files.is_empty() {
+    shell.run(worktree_root, "git", &["add", artifacts_dir])?;
+    let staged = shell.run(
+        worktree_root,
+        "git",
+        &["diff", "--cached", "--name-only", "--", artifacts_dir],
+    )?;
+    if staged.trim().is_empty() {
         eprintln!("complete-stage: no staged changes, skipping commit");
         return Ok(false);
     }
 
-    shell.run(worktree, "git", &["commit", "-m", commit_message])?;
+    shell.run(worktree_root, "git", &["commit", "-m", commit_message])?;
     Ok(true)
 }
 
-fn git_push(shell: &dyn Shell, worktree: &Path, branch: &str) -> Result<()> {
+fn git_push(shell: &dyn Shell, worktree_root: &Path, branch: &str) -> Result<()> {
     shell
-        .run(worktree, "git", &["push", "origin", branch])
+        .run(worktree_root, "git", &["push", "origin", branch])
         .context("failed to push analysis branch")?;
     Ok(())
 }
 
 fn create_draft_pr_if_needed(
     shell: &dyn Shell,
-    worktree: &Path,
+    worktree_root: &Path,
     branch: &str,
     title: &str,
     body: &str,
 ) -> Result<()> {
     match shell.run(
-        worktree,
+        worktree_root,
         "gh",
         &[
             "pr", "list", "--head", branch, "--json", "number", "--jq", "length",
@@ -177,7 +222,7 @@ fn create_draft_pr_if_needed(
     }
 
     let result = shell.run(
-        worktree,
+        worktree_root,
         "gh",
         &["pr", "create", "--draft", "--title", title, "--body", body],
     );
@@ -191,26 +236,17 @@ fn create_draft_pr_if_needed(
 fn update_project_status(
     shell: &dyn Shell,
     repo_root: &Path,
-    config: &Config,
-    manifest: &crate::runtime::SessionManifest,
+    manifest: &SessionManifest,
     target_status: &str,
 ) -> Result<()> {
     let github = GhProjectClient::new(shell);
-    let snapshot = github.load_project_snapshot(repo_root, &config.github.project_id)?;
-
-    let issue_item = snapshot
-        .items
-        .iter()
-        .find(|item| {
-            item.issue_number == manifest.issue_number
-                && item.matches_repo(&manifest.github_owner, &manifest.github_repo)
-        })
-        .ok_or_else(|| anyhow::anyhow!("issue #{} not found in project", manifest.issue_number))?;
-
+    let snapshot = github.load_project_snapshot(repo_root, &manifest.project_id)?;
+    let issue_item = find_project_item(&snapshot.items, manifest)?;
     let option_id = snapshot.option_id_by_name(target_status)?;
+
     github.update_status(
         repo_root,
-        &config.github.project_id,
+        &manifest.project_id,
         &issue_item.item_id,
         &snapshot.status_field_id,
         option_id,
@@ -218,11 +254,88 @@ fn update_project_status(
     Ok(())
 }
 
+fn find_project_item<'a>(
+    items: &'a [ProjectIssueItem],
+    manifest: &SessionManifest,
+) -> Result<&'a ProjectIssueItem> {
+    items
+        .iter()
+        .find(|item| {
+            item.issue_number == manifest.issue_number
+                && item.matches_repo(&manifest.github_owner, &manifest.github_repo)
+        })
+        .ok_or_else(|| {
+            anyhow!(
+                "issue #{} not found in project snapshot",
+                manifest.issue_number
+            )
+        })
+}
+
+fn collect_artifact_files(worktree_root: &Path, artifacts_dir: &str) -> Result<Vec<String>> {
+    let mut files = Vec::new();
+    let root = worktree_root.join(artifacts_dir);
+    if !root.exists() {
+        return Ok(files);
+    }
+    collect_artifact_files_recursive(worktree_root, &root, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_artifact_files_recursive(
+    worktree_root: &Path,
+    current: &Path,
+    files: &mut Vec<String>,
+) -> Result<()> {
+    for entry in fs::read_dir(current)
+        .with_context(|| format!("failed to read directory {}", current.display()))?
+    {
+        let entry =
+            entry.with_context(|| format!("failed to read entry in {}", current.display()))?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_artifact_files_recursive(worktree_root, &path, files)?;
+            continue;
+        }
+        let relative = path
+            .strip_prefix(worktree_root)
+            .with_context(|| format!("failed to relativize {}", path.display()))?;
+        files.push(relative.display().to_string());
+    }
+    Ok(())
+}
+
+fn build_pr_body(
+    issue_url: &str,
+    outcome: &str,
+    artifacts_dir: &str,
+    artifacts: &[String],
+) -> String {
+    let mut body = format!("Ref {issue_url}\n\nOutcome: {outcome}\n\nArtifacts:\n");
+    if artifacts.is_empty() {
+        body.push_str(&format!("- `{artifacts_dir}/`\n"));
+        return body;
+    }
+
+    for artifact in artifacts {
+        body.push_str(&format!("- `{artifact}`\n"));
+    }
+    body
+}
+
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+    use std::collections::BTreeMap;
+    use std::path::Path;
+
     use super::*;
-    use crate::config::FlowStatuses;
+    use crate::config::ZellijConfig;
+    use crate::repo::RepoContext;
+    use crate::runtime::RuntimeLayout;
     use clap::ValueEnum;
+    use tempfile::tempdir;
 
     fn sample_statuses() -> FlowStatuses {
         FlowStatuses {
@@ -271,5 +384,245 @@ mod tests {
             StageOutcome::Blocked.target_status(&statuses),
             "Analysis Blocked"
         );
+    }
+
+    #[derive(Default)]
+    struct FakeShell {
+        responses: BTreeMap<String, String>,
+        calls: RefCell<Vec<String>>,
+    }
+
+    impl FakeShell {
+        fn with_response(mut self, key: &str, value: &str) -> Self {
+            self.responses.insert(key.to_string(), value.to_string());
+            self
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.borrow().clone()
+        }
+    }
+
+    impl Shell for FakeShell {
+        fn run(&self, _cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
+            let key = format!("{program} {}", args.join(" "));
+            self.calls.borrow_mut().push(key.clone());
+            self.responses
+                .iter()
+                .find(|(pattern, _)| key.starts_with(pattern.as_str()))
+                .map(|(_, value)| value.clone())
+                .ok_or_else(|| anyhow!("missing fake response for: {key}"))
+        }
+
+        fn run_with_env(
+            &self,
+            cwd: &Path,
+            _envs: &[(&str, &str)],
+            program: &str,
+            args: &[&str],
+        ) -> Result<String> {
+            self.run(cwd, program, args)
+        }
+
+        fn spawn_with_env(
+            &self,
+            cwd: &Path,
+            _envs: &[(&str, &str)],
+            program: &str,
+            args: &[&str],
+            _stdout_stderr_log_path: Option<&Path>,
+        ) -> Result<()> {
+            self.run(cwd, program, args).map(|_| ())
+        }
+    }
+
+    #[test]
+    fn completes_stage_without_git_changes_and_updates_runtime_state() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let worktree_root = temp.path().join("worktree");
+        std::fs::create_dir_all(repo_root.join(".git")).expect("git dir");
+        std::fs::create_dir_all(&worktree_root).expect("worktree");
+        write_config(&repo_root);
+
+        let runtime = RuntimeLayout::from_repo_root(&repo_root);
+        runtime.ensure_exists().expect("runtime layout");
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir: repo_root.join(".git"),
+            github_owner: "dapi".into(),
+            github_repo: "ai-teamlead".into(),
+        };
+        let manifest = runtime
+            .create_claim_binding(
+                &repo,
+                "PVT_project",
+                &ZellijConfig {
+                    session_name: "teamlead".into(),
+                    tab_name: "issue-analysis".into(),
+                },
+                15,
+            )
+            .expect("claim binding");
+
+        let shell = FakeShell::default()
+            .with_response(
+                "gh api graphql -f query=",
+                r#"{"data":{"node":{"id":"PVT_project","title":"ai-teamlead","field":{"id":"status_field","options":[{"id":"opt_progress","name":"Analysis In Progress"},{"id":"opt_clarify","name":"Waiting for Clarification"},{"id":"opt_review","name":"Waiting for Plan Review"},{"id":"opt_blocked","name":"Analysis Blocked"}]},"items":{"nodes":[{"id":"ITEM_15","fieldValueByName":{"name":"Analysis In Progress","optionId":"opt_progress"},"content":{"number":15,"state":"OPEN","repository":{"name":"ai-teamlead","owner":{"login":"dapi"}}}}]}}}}"#,
+            );
+
+        let context = ExecutionContext {
+            repo_root: repo_root.clone(),
+            worktree_root,
+            branch: "analysis/issue-15".into(),
+            artifacts_dir: "specs/issues/15".into(),
+            message: "нужны ответы пользователя".into(),
+            outcome: StageOutcome::NeedsClarification,
+        };
+
+        execute_complete_stage(&shell, &manifest.session_uuid, context).expect("complete stage");
+
+        let updated_manifest = runtime
+            .load_session_manifest(&manifest.session_uuid)
+            .expect("manifest read")
+            .expect("manifest exists");
+        let updated_issue = runtime
+            .load_issue_index(15)
+            .expect("index read")
+            .expect("index exists");
+
+        assert_eq!(updated_manifest.status, "completed");
+        assert_eq!(
+            updated_issue.last_known_flow_status,
+            "Waiting for Clarification"
+        );
+        assert!(
+            shell.calls().iter().all(|call| !call.starts_with("git ")),
+            "unexpected git command for no-artifacts flow"
+        );
+    }
+
+    #[test]
+    fn plan_ready_commits_pushes_and_creates_pr() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let worktree_root = temp.path().join("worktree");
+        std::fs::create_dir_all(repo_root.join(".git")).expect("git dir");
+        std::fs::create_dir_all(worktree_root.join("specs/issues/15")).expect("artifacts");
+        std::fs::write(
+            worktree_root.join("specs/issues/15/README.md"),
+            "# result\n",
+        )
+        .expect("artifact file");
+        write_config(&repo_root);
+
+        let runtime = RuntimeLayout::from_repo_root(&repo_root);
+        runtime.ensure_exists().expect("runtime layout");
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir: repo_root.join(".git"),
+            github_owner: "dapi".into(),
+            github_repo: "ai-teamlead".into(),
+        };
+        let manifest = runtime
+            .create_claim_binding(
+                &repo,
+                "PVT_project",
+                &ZellijConfig {
+                    session_name: "teamlead".into(),
+                    tab_name: "issue-analysis".into(),
+                },
+                15,
+            )
+            .expect("claim binding");
+
+        let shell = FakeShell::default()
+            .with_response("git add specs/issues/15", "")
+            .with_response(
+                "git diff --cached --name-only -- specs/issues/15",
+                "specs/issues/15/README.md",
+            )
+            .with_response("git commit -m analysis(#15): SDD готов", "")
+            .with_response("git push origin analysis/issue-15", "")
+            .with_response(
+                "gh pr list --head analysis/issue-15 --json number --jq length",
+                "0",
+            )
+            .with_response(
+                "gh pr create --draft --title analysis(#15): SDD готов --body Ref https://github.com/dapi/ai-teamlead/issues/15",
+                "https://github.com/dapi/ai-teamlead/pull/15",
+            )
+            .with_response(
+                "gh api graphql -f query=",
+                r#"{"data":{"node":{"id":"PVT_project","title":"ai-teamlead","field":{"id":"status_field","options":[{"id":"opt_progress","name":"Analysis In Progress"},{"id":"opt_clarify","name":"Waiting for Clarification"},{"id":"opt_review","name":"Waiting for Plan Review"},{"id":"opt_blocked","name":"Analysis Blocked"}]},"items":{"nodes":[{"id":"ITEM_15","fieldValueByName":{"name":"Analysis In Progress","optionId":"opt_progress"},"content":{"number":15,"state":"OPEN","repository":{"name":"ai-teamlead","owner":{"login":"dapi"}}}}]}}}}"#,
+            );
+
+        let context = ExecutionContext {
+            repo_root: repo_root.clone(),
+            worktree_root,
+            branch: "analysis/issue-15".into(),
+            artifacts_dir: "specs/issues/15".into(),
+            message: "SDD готов".into(),
+            outcome: StageOutcome::PlanReady,
+        };
+
+        execute_complete_stage(&shell, &manifest.session_uuid, context).expect("complete stage");
+
+        let calls = shell.calls();
+        assert!(calls.iter().any(|call| call == "git add specs/issues/15"));
+        assert!(
+            calls
+                .iter()
+                .any(|call| call == "git push origin analysis/issue-15")
+        );
+        assert!(
+            calls
+                .iter()
+                .any(|call| call
+                    .starts_with("gh pr create --draft --title analysis(#15): SDD готов"))
+        );
+
+        let updated_issue = runtime
+            .load_issue_index(15)
+            .expect("index read")
+            .expect("index exists");
+        assert_eq!(
+            updated_issue.last_known_flow_status,
+            "Waiting for Plan Review"
+        );
+    }
+
+    fn write_config(repo_root: &Path) {
+        let settings_dir = repo_root.join(".ai-teamlead");
+        std::fs::create_dir_all(&settings_dir).expect("settings dir");
+        std::fs::write(
+            settings_dir.join("settings.yml"),
+            r#"github:
+  project_id: "PVT_project"
+
+issue_analysis_flow:
+  statuses:
+    backlog: "Backlog"
+    analysis_in_progress: "Analysis In Progress"
+    waiting_for_clarification: "Waiting for Clarification"
+    waiting_for_plan_review: "Waiting for Plan Review"
+    ready_for_implementation: "Ready for Implementation"
+    analysis_blocked: "Analysis Blocked"
+
+runtime:
+  max_parallel: 1
+  poll_interval_seconds: 3600
+
+zellij:
+  session_name: "teamlead"
+  tab_name: "issue-analysis"
+
+launch_agent:
+  analysis_branch_template: "analysis/issue-${ISSUE_NUMBER}"
+  worktree_root_template: "${HOME}/worktrees/${REPO}/${BRANCH}"
+  analysis_artifacts_dir_template: "specs/issues/${ISSUE_NUMBER}"
+"#,
+        )
+        .expect("config");
     }
 }

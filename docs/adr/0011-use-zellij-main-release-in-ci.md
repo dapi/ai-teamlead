@@ -49,6 +49,6 @@
 
 ## Связанные документы
 
-- [README.md](/home/danil/code/teamlead/README.md)
-- [docs/features/0001-ai-teamlead-daemon/02-how-we-build.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/02-how-we-build.md)
-- [docs/features/0001-ai-teamlead-daemon/03-how-we-verify.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/03-how-we-verify.md)
+- [README.md](../../README.md)
+- [docs/features/0001-ai-teamlead-cli/02-how-we-build.md](../features/0001-ai-teamlead-cli/02-how-we-build.md)
+- [docs/features/0001-ai-teamlead-cli/03-how-we-verify.md](../features/0001-ai-teamlead-cli/03-how-we-verify.md)

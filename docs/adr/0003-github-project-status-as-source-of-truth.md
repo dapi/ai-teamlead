@@ -55,5 +55,5 @@ default GitHub Project.
 
 ## Связанные документы
 
-- [README.md](/home/danil/code/teamlead/README.md)
-- [docs/issue-analysis-flow.md](/home/danil/code/teamlead/docs/issue-analysis-flow.md)
+- [README.md](../../README.md)
+- [docs/issue-analysis-flow.md](../issue-analysis-flow.md)

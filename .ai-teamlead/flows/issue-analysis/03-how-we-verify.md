@@ -11,6 +11,8 @@
 Обязательный минимум:
 
 - acceptance criteria
+- ready criteria
+- invariants
 - test plan
 - verification checklist
 
@@ -18,6 +20,8 @@
 
 - `core`:
   - `Acceptance Criteria`
+  - `Ready Criteria`
+  - `Invariants`
   - `Test Plan`
   - `Verification Checklist`
 
@@ -30,11 +34,9 @@
   - `Edge Cases`
 - для `chore`:
   - `Operational Validation`
-
-`scaling`:
-
-- для `medium` и `large`:
+- если есть заметные отказные риски:
   - `Failure Scenarios`
+- если для проверки важны runtime-сигналы:
   - `Observability`
 
 Акценты по типу проекта:
@@ -48,7 +50,7 @@
 На выходе документ должен:
 
 - содержать все обязательные `core`-секции
-- содержать релевантные `conditional` и `scaling`-секции
+- содержать релевантные `conditional`-секции
 - быть пригодным как для ручной проверки, так и для будущей автоматизации
 
 Документ должен быть пригоден как для ручной проверки человеком, так и как

@@ -84,7 +84,7 @@
 - создавать lock-файлы или session-артефакты
 - читать GitHub Project
 - обращаться к GitHub API по сети
-- запускать daemon
+- запускать `poll` или `run`
 - запускать `zellij`
 
 ## Конфигурация
@@ -96,7 +96,7 @@
 - присутствуют обязательные поля MVP
 - `github.project_id` заполняется placeholder-значением, требующим ручной
   донастройки
-- `zellij.session_name` вычисляется как `{repo_name}-ai-teamlead`
+- `zellij.session_name` bootstrap-ится как template `${REPO}`
 - `zellij.tab_name` по умолчанию равно `issue-analysis`
 - `launch_agent.analysis_branch_template` по умолчанию равно
   `analysis/issue-${ISSUE_NUMBER}`
@@ -104,6 +104,18 @@
   `${HOME}/worktrees/${REPO}/${BRANCH}`
 - `launch_agent.analysis_artifacts_dir_template` по умолчанию равно
   `specs/issues/${ISSUE_NUMBER}`
+
+Операторские действия после `init`:
+
+1. вручную заменить `github.project_id` placeholder на реальный GitHub Project
+   id
+2. при необходимости скорректировать literal или template
+   `zellij.session_name`
+3. при необходимости скорректировать `launch_agent.*` templates
+4. только после этого запускать `poll` или `run`
+
+Если placeholder не заменен или id невалиден, текущая реализация не проходит
+этап загрузки project snapshot и завершает `poll`/`run` ошибкой.
 
 ## Ограничения реализации
 

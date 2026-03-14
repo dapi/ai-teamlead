@@ -112,6 +112,22 @@ impl RuntimeLayout {
         Ok(manifest)
     }
 
+    pub fn update_session_status(
+        &self,
+        session_uuid: &str,
+        status: &str,
+    ) -> Result<SessionManifest> {
+        let mut manifest = self
+            .load_session_manifest(session_uuid)?
+            .ok_or_else(|| anyhow!("missing session manifest for session_uuid={session_uuid}"))?;
+        manifest.status = status.to_string();
+        manifest.updated_at = Utc::now().to_rfc3339();
+
+        let session_path = self.sessions_dir.join(session_uuid).join("session.json");
+        write_json_pretty(session_path, &manifest)?;
+        Ok(manifest)
+    }
+
     pub fn update_issue_flow_status(&self, issue_number: u64, flow_status: &str) -> Result<()> {
         let mut index = self
             .load_issue_index(issue_number)?
@@ -135,22 +151,6 @@ impl RuntimeLayout {
         let value = serde_json::from_slice(&bytes)
             .with_context(|| format!("failed to parse {}", path.display()))?;
         Ok(Some(value))
-    }
-
-    pub fn update_session_status(
-        &self,
-        session_uuid: &str,
-        status: &str,
-    ) -> Result<SessionManifest> {
-        let mut manifest = self
-            .load_session_manifest(session_uuid)?
-            .ok_or_else(|| anyhow!("missing session manifest for session_uuid={session_uuid}"))?;
-        manifest.status = status.to_string();
-        manifest.updated_at = Utc::now().to_rfc3339();
-
-        let session_path = self.sessions_dir.join(session_uuid).join("session.json");
-        write_json_pretty(session_path, &manifest)?;
-        Ok(manifest)
     }
 
     pub fn session_dir(&self, session_uuid: &str) -> PathBuf {
@@ -320,7 +320,6 @@ mod tests {
             .expect("claim binding");
 
         assert_eq!(manifest.status, "active");
-
         let updated = layout
             .update_session_status(&manifest.session_uuid, "completed")
             .expect("status updated");

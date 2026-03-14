@@ -5,8 +5,8 @@
 
 ## Контекст
 
-Для первой версии `ai-teamlead daemon` нужно было решить, требуется ли
-отдельный health/status интерфейс для наблюдения за daemon.
+Для первой версии `ai-teamlead` нужно было решить, требуется ли
+отдельный health/status интерфейс для наблюдения за утилитой.
 
 Рассматривались варианты:
 
@@ -26,7 +26,7 @@
 
 Для наблюдаемости достаточно:
 
-- stdout/stderr логов foreground daemon
+- stdout/stderr логов foreground-процесса
 - явных сообщений об ошибках у ручных команд `poll` и `run`
 - repo-local диагностических артефактов в `.git/.ai-teamlead/`
 
@@ -39,7 +39,7 @@ file в первую версию не входят.
 
 - меньше сложности в MVP
 - меньше дополнительного state и API surface
-- проще быстрее перейти к рабочему daemon
+- проще быстрее перейти к рабочей утилите
 
 Минусы:
 
@@ -49,5 +49,5 @@ file в первую версию не входят.
 
 ## Связанные документы
 
-- [docs/features/0001-ai-teamlead-daemon/README.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/README.md)
-- [docs/features/0001-ai-teamlead-daemon/03-how-we-verify.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/03-how-we-verify.md)
+- [docs/features/0001-ai-teamlead-cli/README.md](../features/0001-ai-teamlead-cli/README.md)
+- [docs/features/0001-ai-teamlead-cli/03-how-we-verify.md](../features/0001-ai-teamlead-cli/03-how-we-verify.md)

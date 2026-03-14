@@ -16,6 +16,10 @@
 - `init.sh` — project-local bootstrap script для worktree
 - `launch-agent.sh` — project-local launcher script для issue-analysis session
 - `flows/issue-analysis-flow.md` — repo-local flow анализа issue
+- `flows/issue-analysis/README.md` — staged prompt index
+- `flows/issue-analysis/01-what-we-build.md` — prompt оси `Что строим`
+- `flows/issue-analysis/02-how-we-build.md` — prompt оси `Как строим`
+- `flows/issue-analysis/03-how-we-verify.md` — prompt оси `Как проверяем`
 
 Базовый системный контракт flow остается в документации `ai-teamlead`, а файлы
 в этом каталоге задают project-specific адаптацию.

@@ -36,13 +36,19 @@ Versioned project contract layer хранится в:
 
 - `./.ai-teamlead/`
 
-В первой версии `init` должна создавать только versioned-файлы:
+В первой версии `init` должна создавать versioned-файлы contract layer:
 
 - `./.ai-teamlead/settings.yml`
 - `./.ai-teamlead/README.md`
 - `./.ai-teamlead/init.sh`
 - `./.ai-teamlead/launch-agent.sh`
 - `./.ai-teamlead/flows/issue-analysis-flow.md`
+- `./.ai-teamlead/flows/issue-analysis/README.md`
+- `./.ai-teamlead/flows/issue-analysis/01-what-we-build.md`
+- `./.ai-teamlead/flows/issue-analysis/02-how-we-build.md`
+- `./.ai-teamlead/flows/issue-analysis/03-how-we-verify.md`
+- `./.claude/README.md`
+- `./.codex/README.md`
 
 Если в корне репозитория отсутствует `./init.sh`, `init` дополнительно создает
 симлинк:
@@ -81,7 +87,7 @@ Runtime-артефакты по-прежнему хранятся отдельн
 Отклонено.
 
 Это размывает контракт подключения репозитория и мешает явно отделить
-инициализацию project-local файлов от runtime daemon-модели.
+инициализацию project-local файлов от runtime-модели.
 
 ### 2. Оставить имя `bootstrap`
 
@@ -97,10 +103,10 @@ Runtime-артефакты по-прежнему хранятся отдельн
 
 ## Связанные документы
 
-- [README.md](/home/danil/code/teamlead/README.md)
-- [docs/features/0002-repo-init/README.md](/home/danil/code/teamlead/docs/features/0002-repo-init/README.md)
-- [docs/adr/0001-repo-local-ai-config.md](/home/danil/code/teamlead/docs/adr/0001-repo-local-ai-config.md)
-- [docs/adr/0004-runtime-artifacts-in-git-dir.md](/home/danil/code/teamlead/docs/adr/0004-runtime-artifacts-in-git-dir.md)
+- [README.md](../../README.md)
+- [docs/features/0002-repo-init/README.md](../features/0002-repo-init/README.md)
+- [docs/adr/0001-repo-local-ai-config.md](./0001-repo-local-ai-config.md)
+- [docs/adr/0004-runtime-artifacts-in-git-dir.md](./0004-runtime-artifacts-in-git-dir.md)
 
 ## Журнал изменений
 

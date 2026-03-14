@@ -1,10 +1,12 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use serde_json::Value;
 
 use crate::config::ZellijConfig;
+use crate::repo::RepoContext;
 use crate::runtime::RuntimeLayout;
 use crate::shell::Shell;
 
@@ -19,12 +21,14 @@ impl<'a> ZellijLauncher<'a> {
 
     pub fn launch_issue_analysis(
         &self,
+        repo: &RepoContext,
         repo_root: &Path,
         runtime: &RuntimeLayout,
         zellij: &ZellijConfig,
         issue_url: &str,
         session_uuid: &str,
         binary_path: &Path,
+        debug: bool,
     ) -> Result<()> {
         let session_dir = runtime.session_dir(session_uuid);
         fs::create_dir_all(&session_dir)
@@ -32,17 +36,29 @@ impl<'a> ZellijLauncher<'a> {
 
         let entrypoint_path = session_dir.join("pane-entrypoint.sh");
         let layout_path = session_dir.join("launch-layout.kdl");
+        let launch_log_path = session_dir.join("launch.log");
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&launch_log_path)
+            .with_context(|| format!("failed to create {}", launch_log_path.display()))?;
         let quoted_repo_root = shell_single_quote(repo_root.to_string_lossy().as_ref());
         let quoted_launch_agent = shell_single_quote("./.ai-teamlead/launch-agent.sh");
         let quoted_session_uuid = shell_single_quote(session_uuid);
         let quoted_issue_url = shell_single_quote(issue_url);
         let quoted_binary = shell_single_quote(binary_path.to_string_lossy().as_ref());
+        let quoted_launch_log = shell_single_quote(launch_log_path.to_string_lossy().as_ref());
+        let debug_flag = if debug { "1" } else { "0" };
 
         let entrypoint = format!(
             "#!/usr/bin/env bash\n\
 set -euo pipefail\n\
 cd {quoted_repo_root}\n\
 export AI_TEAMLEAD_BIN={quoted_binary}\n\
+export AI_TEAMLEAD_DEBUG={debug_flag}\n\
+export AI_TEAMLEAD_LAUNCH_LOG={quoted_launch_log}\n\
+mkdir -p \"$(dirname \"$AI_TEAMLEAD_LAUNCH_LOG\")\"\n\
+printf '[%s] pane-entrypoint: session_uuid=%s issue_url=%s debug=%s\\n' \"$(date -Iseconds)\" {quoted_session_uuid} {quoted_issue_url} \"$AI_TEAMLEAD_DEBUG\" >>\"$AI_TEAMLEAD_LAUNCH_LOG\"\n\
 exec {quoted_launch_agent} {quoted_session_uuid} {quoted_issue_url}\n"
         );
         fs::write(&entrypoint_path, entrypoint)
@@ -64,7 +80,7 @@ exec {quoted_launch_agent} {quoted_session_uuid} {quoted_issue_url}\n"
         }
 
         let layout = format!(
-            "layout {{\n  tab name=\"{}\" {{\n    pane command=\"bash\" {{\n      args \"{}\"\n    }}\n  }}\n}}\n",
+            "layout {{\n  tab name=\"{}\" {{\n    pane command=\"bash\" {{\n      args \"{}\"\n      close_on_exit false\n    }}\n  }}\n}}\n",
             escape_kdl_string(&zellij.tab_name),
             escape_kdl_string(entrypoint_path.to_string_lossy().as_ref()),
         );
@@ -78,27 +94,117 @@ exec {quoted_launch_agent} {quoted_session_uuid} {quoted_issue_url}\n"
         let session_exists = sessions
             .lines()
             .any(|line| line.trim() == zellij.session_name);
-        let zellij_command = if session_exists {
-            format!(
-                "zellij --session {} --layout {}",
-                shell_single_quote(&zellij.session_name),
-                shell_single_quote(layout_path.to_string_lossy().as_ref())
-            )
-        } else {
-            format!(
-                "zellij --session {} -n {}",
-                shell_single_quote(&zellij.session_name),
-                shell_single_quote(layout_path.to_string_lossy().as_ref())
-            )
-        };
 
-        self.shell.spawn_with_env(
-            repo_root,
-            &[],
-            "script",
-            &["-qfc", &zellij_command, "/dev/null"],
-        )
+        let layout_str = layout_path.to_string_lossy();
+
+        if session_exists {
+            ensure_session_repo_scope(self.shell, repo_root, repo, &zellij.session_name)?;
+            // For existing sessions: use `zellij action new-tab` IPC command.
+            // Clear inherited ZELLIJ_* vars before session-scoped IPC. When
+            // ai-teamlead runs inside another zellij pane, leaking the outer
+            // ZELLIJ_PANE_ID breaks list-panes/new-tab against the target
+            // existing session on zellij 0.44.
+            run_session_scoped_zellij_action(
+                self.shell,
+                repo_root,
+                &zellij.session_name,
+                &["action", "new-tab", "--layout", &layout_str],
+            )?;
+            Ok(())
+        } else {
+            // For new sessions: a PTY is still required for the initial attach,
+            // so we keep `script -qfc`.  Clear inherited ZELLIJ env vars via
+            // `env -u` to prevent the inner client from interfering with the
+            // outer zellij server (the likely cause of the server crash).
+            let zellij_command = format!(
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID zellij --session {} -n {}",
+                shell_single_quote(&zellij.session_name),
+                shell_single_quote(&layout_str)
+            );
+            self.shell.spawn_with_env(
+                repo_root,
+                &[],
+                "script",
+                &["-qfc", &zellij_command, "/dev/null"],
+                Some(&launch_log_path),
+            )
+        }
     }
+}
+
+fn run_session_scoped_zellij_action(
+    shell: &dyn Shell,
+    cwd: &Path,
+    session_name: &str,
+    args: &[&str],
+) -> Result<String> {
+    let mut command = vec![
+        "-u".to_string(),
+        "ZELLIJ".to_string(),
+        "-u".to_string(),
+        "ZELLIJ_SESSION_NAME".to_string(),
+        "-u".to_string(),
+        "ZELLIJ_PANE_ID".to_string(),
+        "ZELLIJ=0".to_string(),
+        format!("ZELLIJ_SESSION_NAME={session_name}"),
+        "zellij".to_string(),
+    ];
+    command.extend(args.iter().map(|arg| arg.to_string()));
+    let command_refs = command.iter().map(String::as_str).collect::<Vec<_>>();
+    shell.run(cwd, "env", &command_refs)
+}
+
+fn ensure_session_repo_scope(
+    shell: &dyn Shell,
+    repo_root: &Path,
+    repo: &RepoContext,
+    session_name: &str,
+) -> Result<()> {
+    let panes_output = run_session_scoped_zellij_action(
+        shell,
+        repo_root,
+        session_name,
+        &["action", "list-panes", "--json", "-a", "-c", "-t", "-s"],
+    )?;
+    let foreign_repos = find_foreign_repos_in_session(shell, &panes_output, repo)?;
+    if foreign_repos.is_empty() {
+        return Ok(());
+    }
+
+    bail!(
+        "zellij session '{}' already contains panes from other repos: {}; shared multi-repo sessions are not allowed",
+        session_name,
+        foreign_repos.into_iter().collect::<Vec<_>>().join(", ")
+    );
+}
+
+fn find_foreign_repos_in_session(
+    shell: &dyn Shell,
+    panes_output: &str,
+    repo: &RepoContext,
+) -> Result<BTreeSet<String>> {
+    let value: Value = serde_json::from_str(panes_output)
+        .context("failed to parse zellij pane metadata while validating session repo scope")?;
+    let mut pane_cwds = BTreeSet::new();
+    collect_pane_cwds(&value, &mut pane_cwds);
+
+    let expected_repo = format!("{}/{}", repo.github_owner, repo.github_repo);
+    let mut foreign_repos = BTreeSet::new();
+    for pane_cwd in pane_cwds {
+        let pane_path = Path::new(&pane_cwd);
+        if !pane_path.is_dir() {
+            continue;
+        }
+        let Ok(pane_repo) = RepoContext::discover(shell, pane_path) else {
+            continue;
+        };
+        let pane_repo_slug = format!("{}/{}", pane_repo.github_owner, pane_repo.github_repo);
+        if pane_repo_slug != expected_repo {
+            foreign_repos.insert(pane_repo_slug);
+        }
+    }
+
+    Ok(foreign_repos)
 }
 
 pub fn capture_current_binding(
@@ -183,6 +289,25 @@ fn find_object_for_pane<'a>(value: &'a Value, pane_id: &str) -> Option<&'a Value
     }
 }
 
+fn collect_pane_cwds(value: &Value, pane_cwds: &mut BTreeSet<String>) {
+    match value {
+        Value::Object(map) => {
+            if let Some(cwd) = map.get("pane_cwd").and_then(value_to_string) {
+                pane_cwds.insert(cwd);
+            }
+            for child in map.values() {
+                collect_pane_cwds(child, pane_cwds);
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                collect_pane_cwds(child, pane_cwds);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn find_first_scalar_by_keys(value: &Value, keys: &[&str]) -> Option<String> {
     match value {
         Value::Object(map) => {
@@ -228,13 +353,16 @@ mod tests {
 
     use super::{ZellijLauncher, resolve_tab_id, resolve_tab_id_from_panes};
     use crate::config::ZellijConfig;
+    use crate::repo::RepoContext;
     use crate::runtime::RuntimeLayout;
     use crate::shell::Shell;
 
     #[derive(Default)]
     struct FakeShell {
         responses: BTreeMap<String, String>,
+        runs: RefCell<Vec<String>>,
         spawns: RefCell<Vec<String>>,
+        run_with_env_calls: RefCell<Vec<(String, Vec<(String, String)>)>>,
     }
 
     impl FakeShell {
@@ -242,25 +370,72 @@ mod tests {
             self.responses.insert(key.to_string(), value.to_string());
             self
         }
+
+        fn with_cwd_response(
+            mut self,
+            cwd: &Path,
+            program: &str,
+            args: &[&str],
+            value: &str,
+        ) -> Self {
+            self.responses.insert(
+                format!("cwd={}::{program} {}", cwd.display(), args.join(" ")),
+                value.to_string(),
+            );
+            self
+        }
     }
 
     impl Shell for FakeShell {
         fn run(&self, _cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
+            let cwd_key = format!("cwd={}::{program} {}", _cwd.display(), args.join(" "));
+            self.runs
+                .borrow_mut()
+                .push(format!("{program} {}", args.join(" ")));
+            if let Some(value) = self.responses.get(&cwd_key) {
+                return Ok(value.clone());
+            }
             let key = format!("{program} {}", args.join(" "));
-            self.responses
-                .get(&key)
-                .cloned()
-                .ok_or_else(|| anyhow!("missing fake response for: {key}"))
+            if let Some(value) = self.responses.get(&key) {
+                return Ok(value.clone());
+            }
+            for (prefix, value) in &self.responses {
+                if key.starts_with(prefix) {
+                    return Ok(value.clone());
+                }
+            }
+            Err(anyhow!("missing fake response for: {key}"))
         }
 
         fn run_with_env(
             &self,
-            cwd: &Path,
-            _envs: &[(&str, &str)],
+            _cwd: &Path,
+            envs: &[(&str, &str)],
             program: &str,
             args: &[&str],
         ) -> Result<String> {
-            self.run(cwd, program, args)
+            let cwd_key = format!("cwd={}::{program} {}", _cwd.display(), args.join(" "));
+            if let Some(value) = self.responses.get(&cwd_key) {
+                return Ok(value.clone());
+            }
+            let key = format!("{program} {}", args.join(" "));
+            let env_pairs: Vec<(String, String)> = envs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            self.run_with_env_calls
+                .borrow_mut()
+                .push((key.clone(), env_pairs));
+            // Try exact match first, then prefix match for dynamic paths
+            if let Some(value) = self.responses.get(&key) {
+                return Ok(value.clone());
+            }
+            for (prefix, value) in &self.responses {
+                if key.starts_with(prefix) {
+                    return Ok(value.clone());
+                }
+            }
+            Err(anyhow!("missing fake response for: {key}"))
         }
 
         fn spawn_with_env(
@@ -269,6 +444,7 @@ mod tests {
             _envs: &[(&str, &str)],
             program: &str,
             args: &[&str],
+            _stdout_stderr_log_path: Option<&Path>,
         ) -> Result<()> {
             self.spawns
                 .borrow_mut()
@@ -307,6 +483,12 @@ mod tests {
 
         let shell = FakeShell::default().with_response("zellij list-sessions --short", "");
         let launcher = ZellijLauncher::new(&shell);
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir: git_dir.clone(),
+            github_owner: "dapi".into(),
+            github_repo: "teamlead".into(),
+        };
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
@@ -314,12 +496,14 @@ mod tests {
 
         launcher
             .launch_issue_analysis(
+                &repo,
                 &repo_root,
                 &runtime,
                 &zellij,
                 "https://github.com/dapi/teamlead/issues/42",
                 "session-uuid",
                 Path::new("/tmp/ai-teamlead"),
+                false,
             )
             .expect("launch should succeed");
 
@@ -327,6 +511,12 @@ mod tests {
         assert_eq!(spawns.len(), 1);
         assert!(spawns[0].contains("script -qfc"));
         assert!(spawns[0].contains("--session 'ai-teamlead' -n"));
+        // Verify ZELLIJ env vars are cleared to prevent server crash
+        assert!(
+            spawns[0].contains("env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID"),
+            "new session command must clear ZELLIJ env vars, got: {}",
+            spawns[0]
+        );
         assert!(
             runtime
                 .session_dir("session-uuid")
@@ -338,6 +528,221 @@ mod tests {
                 .session_dir("session-uuid")
                 .join("pane-entrypoint.sh")
                 .exists()
+        );
+        assert!(
+            runtime
+                .session_dir("session-uuid")
+                .join("launch.log")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn launcher_uses_action_new_tab_for_existing_session() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let git_dir = repo_root.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("git dir");
+
+        let runtime = RuntimeLayout::from_repo_root(&repo_root);
+        runtime.ensure_exists().expect("runtime");
+
+        let shell = FakeShell::default()
+            .with_response("zellij list-sessions --short", "ai-teamlead")
+            .with_response(
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID ZELLIJ=0 ZELLIJ_SESSION_NAME=ai-teamlead zellij action list-panes --json -a -c -t -s",
+                &format!(
+                    r#"[{{"id":"terminal_1","pane_cwd":"{}"}}]"#,
+                    repo_root.display()
+                ),
+            )
+            .with_cwd_response(
+                &repo_root,
+                "git",
+                &["rev-parse", "--show-toplevel"],
+                repo_root.to_string_lossy().as_ref(),
+            )
+            .with_cwd_response(&repo_root, "git", &["rev-parse", "--git-dir"], ".git")
+            .with_cwd_response(
+                &repo_root,
+                "git",
+                &["remote", "get-url", "origin"],
+                "git@github.com:dapi/teamlead.git",
+            )
+            .with_response(
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID ZELLIJ=0 ZELLIJ_SESSION_NAME=ai-teamlead zellij action new-tab --layout",
+                "",
+            );
+        let launcher = ZellijLauncher::new(&shell);
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir: git_dir.clone(),
+            github_owner: "dapi".into(),
+            github_repo: "teamlead".into(),
+        };
+        let zellij = ZellijConfig {
+            session_name: "ai-teamlead".into(),
+            tab_name: "issue-analysis".into(),
+        };
+
+        launcher
+            .launch_issue_analysis(
+                &repo,
+                &repo_root,
+                &runtime,
+                &zellij,
+                "https://github.com/dapi/teamlead/issues/42",
+                "session-uuid",
+                Path::new("/tmp/ai-teamlead"),
+                false,
+            )
+            .expect("launch should succeed");
+
+        // No script -qfc spawn for existing sessions
+        let spawns = shell.spawns.borrow();
+        assert_eq!(
+            spawns.len(),
+            0,
+            "existing session must not use spawn/script"
+        );
+
+        // Verify existing-session IPC clears inherited ZELLIJ_* vars.
+        let runs = shell.runs.borrow();
+        let zellij_call = runs
+            .iter()
+            .find(|cmd| cmd.contains("zellij action new-tab --layout"))
+            .expect("should call zellij action new-tab");
+        assert!(
+            zellij_call.contains("env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID"),
+            "existing session IPC must clear inherited ZELLIJ vars, got: {zellij_call}"
+        );
+        assert!(
+            zellij_call.contains("ZELLIJ_SESSION_NAME=ai-teamlead"),
+            "existing session IPC must target requested session, got: {zellij_call}"
+        );
+        assert!(
+            shell.run_with_env_calls.borrow().is_empty(),
+            "existing session path should not rely on inherited env via run_with_env"
+        );
+    }
+
+    #[test]
+    fn launcher_rejects_existing_session_with_foreign_repo_panes() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let foreign_root = temp.path().join("foreign");
+        let git_dir = repo_root.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("git dir");
+        std::fs::create_dir_all(&foreign_root).expect("foreign dir");
+
+        let runtime = RuntimeLayout::from_repo_root(&repo_root);
+        runtime.ensure_exists().expect("runtime");
+
+        let shell = FakeShell::default()
+            .with_response("zellij list-sessions --short", "ai-teamlead")
+            .with_response(
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID ZELLIJ=0 ZELLIJ_SESSION_NAME=ai-teamlead zellij action list-panes --json -a -c -t -s",
+                &format!(
+                    r#"[{{"id":"terminal_9","pane_cwd":"{}"}}]"#,
+                    foreign_root.display()
+                ),
+            )
+            .with_cwd_response(
+                &foreign_root,
+                "git",
+                &["rev-parse", "--show-toplevel"],
+                foreign_root.to_string_lossy().as_ref(),
+            )
+            .with_cwd_response(&foreign_root, "git", &["rev-parse", "--git-dir"], ".git")
+            .with_cwd_response(
+                &foreign_root,
+                "git",
+                &["remote", "get-url", "origin"],
+                "git@github.com:dapi/foreign.git",
+            );
+        let launcher = ZellijLauncher::new(&shell);
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir,
+            github_owner: "dapi".into(),
+            github_repo: "teamlead".into(),
+        };
+        let zellij = ZellijConfig {
+            session_name: "ai-teamlead".into(),
+            tab_name: "issue-analysis".into(),
+        };
+
+        let error = launcher
+            .launch_issue_analysis(
+                &repo,
+                &repo_root,
+                &runtime,
+                &zellij,
+                "https://github.com/dapi/teamlead/issues/42",
+                "session-uuid",
+                Path::new("/tmp/ai-teamlead"),
+                false,
+            )
+            .expect_err("launch should fail for multi-repo session");
+
+        assert!(
+            error
+                .to_string()
+                .contains("shared multi-repo sessions are not allowed"),
+            "unexpected error: {error:#}"
+        );
+        assert!(
+            error.to_string().contains("dapi/foreign"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn layout_includes_close_on_exit_false() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        let git_dir = repo_root.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("git dir");
+
+        let runtime = RuntimeLayout::from_repo_root(&repo_root);
+        runtime.ensure_exists().expect("runtime");
+
+        let shell = FakeShell::default().with_response("zellij list-sessions --short", "");
+        let launcher = ZellijLauncher::new(&shell);
+        let repo = RepoContext {
+            repo_root: repo_root.clone(),
+            git_dir: git_dir.clone(),
+            github_owner: "dapi".into(),
+            github_repo: "teamlead".into(),
+        };
+        let zellij = ZellijConfig {
+            session_name: "ai-teamlead".into(),
+            tab_name: "issue-analysis".into(),
+        };
+
+        launcher
+            .launch_issue_analysis(
+                &repo,
+                &repo_root,
+                &runtime,
+                &zellij,
+                "https://github.com/dapi/teamlead/issues/42",
+                "session-uuid",
+                Path::new("/tmp/ai-teamlead"),
+                false,
+            )
+            .expect("launch should succeed");
+
+        let layout_content = std::fs::read_to_string(
+            runtime
+                .session_dir("session-uuid")
+                .join("launch-layout.kdl"),
+        )
+        .expect("layout file");
+        assert!(
+            layout_content.contains("close_on_exit false"),
+            "layout must include close_on_exit false to keep pane alive after agent exits, got: {}",
+            layout_content
         );
     }
 }

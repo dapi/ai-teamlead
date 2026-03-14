@@ -1,17 +1,21 @@
 # ADR-0005: CLI-контракт команд `poll` и `run`
 
-Статус: accepted
+Статус: superseded by ADR-0021
 Дата: 2026-03-13
+
+Этот ADR фиксировал минимальный CLI-контракт раннего MVP.
+
+Текущий канонический CLI-контракт `poll` / `run` / `loop` описан в
+[ADR-0021](./0021-cli-contract-poll-run-loop.md).
 
 ## Контекст
 
-Для первой версии `ai-teamlead daemon` нужно определить минимальный CLI-
-контракт ручного управления.
+Для первой версии `ai-teamlead` нужно определить минимальный CLI-контракт.
 
 Требования:
 
 - команда должна быть простой и терминальной
-- ручной запуск должен соответствовать тем же правилам, что и daemon
+- ручной запуск должен соответствовать тем же правилам, что и `poll`
 - CLI не должен вводить отдельную альтернативную модель состояний
 - контракт должен быть достаточен для MVP без избыточного набора команд
 
@@ -31,7 +35,7 @@
 Назначение:
 
 - `poll` инициирует один цикл поиска и claim подходящей issue по тем же
-  правилам, что и daemon loop
+  правилам, что и polling cycle
 - `run` запускает analysis flow для явно указанной issue при соблюдении правил
   допустимых входных статусов
 
@@ -39,9 +43,11 @@
 
 - `poll` не принимает issue как аргумент
 - `run` принимает идентификатор issue или URL issue
+- `poll` и `run` могут принимать optional override
+  `--zellij-session <SESSION>` для target launcher context
 - обе команды работают в контексте текущего репозитория и его
   `./.ai-teamlead/settings.yml`
-- обе команды используют ту же статусную модель GitHub Project, что и daemon
+- обе команды используют ту же статусную модель GitHub Project
 
 ## Последствия
 
@@ -58,5 +64,13 @@
 
 ## Связанные документы
 
-- [docs/issue-analysis-flow.md](/home/danil/code/teamlead/docs/issue-analysis-flow.md)
-- [docs/features/0001-ai-teamlead-daemon/README.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/README.md)
+- [docs/issue-analysis-flow.md](../issue-analysis-flow.md)
+- [docs/features/0001-ai-teamlead-cli/README.md](../features/0001-ai-teamlead-cli/README.md)
+- [docs/adr/0021-zellij-session-target-resolution.md](./0021-zellij-session-target-resolution.md)
+
+## Журнал изменений
+
+### 2026-03-14
+
+- добавлен optional CLI override `--zellij-session <SESSION>` для `poll` и
+  `run`

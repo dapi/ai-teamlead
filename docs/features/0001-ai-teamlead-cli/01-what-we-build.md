@@ -26,31 +26,35 @@
 
 ## Результат
 
-Полезным результатом первой версии считается daemon, который:
+Полезным результатом первой версии считается CLI-утилита, которая:
 
 - запускается в foreground
 - работает в контексте одного репозитория
 - читает `./.ai-teamlead/settings.yml` из репозитория
-- периодически ищет подходящую issue в GitHub Project
-- переводит issue в `Analysis In Progress`
+- умеет выполнить один selection cycle через `poll`
+- умеет выполнить issue-level запуск через `run`
+- умеет выполнять непрерывный foreground loop через `loop`
+- переводит issue в `Analysis In Progress` внутри общего issue-level `run`-path
 - запускает `issue-analysis-flow` в настроенной `zellij` session и tab
 
 ## Scope
 
 В первую версию входит:
 
-- standalone daemon
+- CLI-утилита с командами `init`, `poll`, `run`, `loop`
 - repo-local конфиг `./.ai-teamlead/settings.yml`
 - использование versioned project-local contract из `./.ai-teamlead/`
-- polling loop
+- one-shot selection cycle через `poll`
+- общий issue-level orchestration path через `run`
+- foreground loop поверх `poll`
 - выбор одной issue в рамках `max_parallel: 1`
 - запуск `issue-analysis-flow`
-- ручные команды `poll` и `run`
+- ручные команды `poll`, `run`, `loop`
 
 ## Вне scope
 
 - автоматическая реализация issue
-- создание ветки, worktree, коммитов и PR самим daemon (эта ответственность
+- создание ветки, worktree, коммитов и PR самим `ai-teamlead` (эта ответственность
   делегирована project-local `launch-agent.sh`, см.
   [Feature 0003](../0003-agent-launch-orchestration/README.md))
 - web UI

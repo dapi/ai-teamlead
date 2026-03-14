@@ -2,12 +2,14 @@
 
 ## Архитектура
 
-Первая версия строится как один foreground daemon на один репозиторий.
+Первая версия строится как CLI-утилита, работающая в контексте одного репозитория.
 
 Состав решения:
 
 - загрузчик repo-local конфига `./.ai-teamlead/settings.yml`
-- polling loop
+- selection cycle `poll`
+- issue-level orchestration path `run`
+- foreground loop `loop`
 - GitHub adapter на базе `gh` CLI для чтения и изменения состояния issue в
   Project
 - dispatcher запуска flow
@@ -24,13 +26,16 @@
 
 Ключевые состояния:
 
-- daemon запущен
-- daemon ждет следующего polling cycle
-- daemon нашел подходящую issue
+- `poll` запущен
+- `poll` не нашел подходящей issue, завершился
+- `poll` нашел подходящую issue
+- `run` проверил допустимость входа
 - issue переведена в `Analysis In Progress`
 - issue связана с `session_uuid`
 - flow запущен
-- daemon вернулся в цикл ожидания
+- `poll` завершился
+- `loop` продолжает следующий цикл после пустого результата или ошибки одного
+  цикла
 
 Состояния issue определяются не локально, а через GitHub Project statuses.
 
@@ -56,23 +61,23 @@
 
 - repo-local конфиг `./.ai-teamlead/settings.yml`
 - versioned project-local flow в `./.ai-teamlead/flows/issue-analysis-flow.md`
-- standalone daemon в foreground
-- single-process loop
+- foreground CLI-утилита с командами `init`, `poll`, `run`, `loop`
+- `loop` является foreground-оберткой над `poll`, а не отдельным daemon model
 - язык реализации MVP: Rust
 - GitHub Project status как источник истины
 - `max_parallel: 1` для MVP
 - repo-local runtime-артефакты в `.git/.ai-teamlead/`
-- минимальный CLI-контракт состоит из команд `poll` и `run`
+- минимальный CLI-контракт состоит из команд `poll`, `run`, `loop`
 - базовый GitHub integration layer строится на `gh` CLI
 - GitHub owner/repo жестко берутся из текущего git-репозитория
 - каждая issue в анализе имеет связанную агентскую сессию с `session_uuid`
-- `poll` выбирает issue из `Backlog` по возрастанию issue number
+- `poll` выбирает issue из `Backlog` в порядке snapshot GitHub Project
 - docker-based CI для `zellij` использует pinned release из `dapi/zellij-main`
 
 Дополнительные правила реализации:
 
-- daemon должен работать только в контексте одного репозитория
-- несколько репозиториев могут иметь независимые daemon-инстансы
+- `ai-teamlead` должен работать только в контексте одного репозитория
+- несколько репозиториев могут использоваться независимо
 - смена статуса в GitHub должна происходить до старта анализа
 - локальный state не должен подменять GitHub как источник истины
 
@@ -98,20 +103,21 @@ runtime:
   poll_interval_seconds: 3600
 
 zellij:
-  session_name: "{repo_name}-ai-teamlead"
+  session_name: "${REPO}"
   tab_name: "issue-analysis"
 ```
 
 Здесь:
 
-- `session_name` формируется по правилу из
-  [ADR-0014](../../../docs/adr/0014-zellij-launch-context-naming.md):
-  `{repo_name}-ai-teamlead`, где `repo_name` — имя текущего git-репозитория
-- `session_name` и `tab_name` это стабильные project-local идентификаторы для
-  bootstrap и orchestration
+- `session_name` следует правилу из
+  [ADR-0021](../../../docs/adr/0021-zellij-session-target-resolution.md):
+  default хранится как `${REPO}` и рендерится из GitHub repo slug, но
+  используется как fallback после CLI override и `ZELLIJ_SESSION_NAME`
+- `tab_name` это стабильный project-local идентификатор для orchestration
 - runtime `session_id`, `tab_id`, `pane_id` не задаются в конфиге
-- `ai-teamlead` во время запуска должен либо найти существующие session/tab по
-  этим именам, либо создать их
+- `ai-teamlead` во время запуска должен выбрать effective target session,
+  запретить shared multi-repo existing session и затем либо найти существующие
+  session/tab, либо создать их
 
 ## Ограничения реализации
 
@@ -123,7 +129,7 @@ zellij:
 
 ## Runtime layout
 
-Repo-local runtime-артефакты daemon хранятся в:
+Repo-local runtime-артефакты хранятся в:
 
 ```text
 .git/.ai-teamlead/
@@ -146,11 +152,11 @@ Repo-local runtime-артефакты daemon хранятся в:
 
 Точная схема файлов и полей вынесена в:
 
-- [05-runtime-artifacts.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/05-runtime-artifacts.md)
+- [05-runtime-artifacts.md](./05-runtime-artifacts.md)
 
 ## CLI-контракт
 
-Для MVP фиксируются две ручные команды:
+Для MVP фиксируются ручные команды `poll`, `run`, `loop`.
 
 ### `poll`
 
@@ -167,6 +173,9 @@ Repo-local runtime-артефакты daemon хранятся в:
 - команда не должна брать больше `runtime.max_parallel` issues за цикл
 - при наличии нескольких подходящих issues команда выбирает верхнюю issue в
   порядке GitHub Project
+- команда не реализует отдельный issue-level lifecycle
+- если issue выбрана, команда передает ее в общий issue-level `run`-path
+- если issue не найдена, команда завершает цикл без ошибки
 
 ### `run`
 
@@ -180,10 +189,30 @@ Repo-local runtime-артефакты daemon хранятся в:
 - команда работает в контексте текущего репозитория
 - команда использует те же правила допустимых статусов, что и SSOT
 - команда не должна обходить правила transition model
-- команда запускает нового агента в новой `zellij` pane
+- команда является каноническим issue-level entrypoint
+- команда отвечает за claim, re-entry, `session_uuid` и launcher orchestration
+- команда запускает или восстанавливает launcher path в stable launch context
 - в запуск агента передается project-local `issue-analysis-flow`
 - в запуск агента передается URL GitHub issue
-- `poll` после claim использует тот же запуск, что и `run`
+- `poll` после выбора issue использует тот же `run`-path
+
+### `loop`
+
+Назначение:
+
+- выполнять непрерывный foreground loop поверх `poll`
+
+Правила:
+
+- команда не принимает issue как аргумент
+- команда работает в контексте текущего репозитория
+- команда выполняет bootstrap один раз до входа в цикл
+- между циклами команда делает паузу по `runtime.poll_interval_seconds`
+- пустой цикл `poll` не завершает `loop`
+- ошибка одного цикла не завершает `loop`
+- bootstrap/config/runtime ошибки до входа в loop остаются фатальными
+- `loop` использует ровно те же selection semantics, что и `poll`
+- `loop` использует ровно тот же issue-level `run`-path, что и `poll` и `run`
 
 ## Launcher
 
@@ -204,6 +233,4 @@ Repo-local runtime-артефакты daemon хранятся в:
   готовит analysis worktree и после этого стартует настроенного агента
   (`codex` или `claude`) с project-local `issue-analysis-flow` и URL issue
 - минимальный launcher input для агента:
-  - `./.ai-teamlead/flows/issue-analysis-flow.md`
-  - URL GitHub issue
-  - `session_uuid`
+  `./.ai-teamlead/flows/issue-analysis-flow.md`, URL GitHub issue, `session_uuid`

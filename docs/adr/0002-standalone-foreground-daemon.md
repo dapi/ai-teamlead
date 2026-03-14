@@ -1,7 +1,11 @@
-# ADR-0002: Standalone foreground daemon для MVP
+# ADR-0002: Foreground CLI-утилита для MVP
 
 Статус: accepted
 Дата: 2026-03-13
+
+Примечание: этот ADR фиксирует выбор foreground execution model для раннего MVP.
+Текущий канонический набор CLI-команд описан в
+[ADR-0021](./0021-cli-contract-poll-run-loop.md).
 
 ## Контекст
 
@@ -13,22 +17,22 @@
 
 - один процесс
 - foreground execution
-- собственный polling loop
+- one-shot команда `poll`
 - минимальная оркестрационная сложность
 
 ## Решение
 
-На первом этапе `ai-teamlead` реализуется как standalone daemon, который
-работает в foreground и сам выполняет polling loop.
+`ai-teamlead` реализуется как foreground CLI-утилита. В раннем MVP базовый
+контур строился вокруг one-shot команды `poll`, а дальнейшая эволюция
+CLI-контракта вынесена в отдельные ADR.
 
-`systemd --user timer` не используется как базовая модель запуска первого MVP и
-рассматривается как возможный следующий этап интеграции.
+`systemd --user timer` не используется как базовая модель запуска первого MVP.
 
 MVP runtime-модель:
 
-- single-process loop
+- one-shot `poll`
 - `max_parallel: 1`
-- один экземпляр daemon на один репозиторий
+- один экземпляр на один репозиторий
 
 ## Последствия
 
@@ -41,12 +45,11 @@ MVP runtime-модель:
 
 Минусы:
 
-- нужен собственный polling loop
-- часть функций supervisor/process manager пока не делегируется systemd
 - при дальнейшем росте возможностей может понадобиться дополнительный режим
   запуска
 
 ## Связанные документы
 
-- [README.md](/home/danil/code/teamlead/README.md)
-- [docs/issue-analysis-flow.md](/home/danil/code/teamlead/docs/issue-analysis-flow.md)
+- [../../README.md](../../README.md)
+- [../issue-analysis-flow.md](../issue-analysis-flow.md)
+- [./0021-cli-contract-poll-run-loop.md](./0021-cli-contract-poll-run-loop.md)

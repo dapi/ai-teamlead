@@ -5,7 +5,7 @@
 
 ## Контекст
 
-Для команды `poll` и daemon loop нужно было определить, в каком порядке
+Для команды `poll` нужно было определить, в каком порядке
 выбирать issue, если в `Backlog` находится несколько подходящих задач.
 
 Требования:
@@ -16,28 +16,29 @@
 
 ## Решение
 
-В MVP выбор следующей issue из `Backlog` выполняется по возрастанию номера
-issue.
+В MVP выбор следующей issue из `Backlog` выполняется в том порядке, в котором
+элементы приходят из snapshot GitHub Project.
 
-То есть при прочих равных первой выбирается верхняя issue в порядке GitHub
-Project.
+То есть при прочих равных первой выбирается верхняя подходящая issue в порядке
+GitHub Project для текущего репозитория.
 
 ## Последствия
 
 Плюсы:
 
 - правило простое и прозрачное
-- не зависит от отдельного project ordering API
+- соответствует фактическому порядку project snapshot, с которым уже работает
+  `gh`
 - легко проверить и воспроизвести
 
 Минусы:
 
-- порядок не обязательно совпадает с визуальным порядком карточек в GitHub
+- реализация зависит от стабильности порядка элементов в snapshot GitHub
   Project
-- позже может потребоваться отдельное решение, если понадобится project-native
-  ordering
+- позже может потребоваться отдельное решение, если snapshot ordering перестанет
+  быть достаточным контрактом
 
 ## Связанные документы
 
-- [docs/issue-analysis-flow.md](/home/danil/code/teamlead/docs/issue-analysis-flow.md)
-- [docs/features/0001-ai-teamlead-daemon/03-how-we-verify.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/03-how-we-verify.md)
+- [docs/issue-analysis-flow.md](../issue-analysis-flow.md)
+- [docs/features/0001-ai-teamlead-cli/03-how-we-verify.md](../features/0001-ai-teamlead-cli/03-how-we-verify.md)

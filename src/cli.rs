@@ -2,18 +2,28 @@ use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
 #[command(name = "ai-teamlead")]
-#[command(about = "Repo-local AI team lead daemon")]
+#[command(about = "Repo-local AI team lead CLI")]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Option<Command>,
+    pub command: Command,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    Daemon,
     Init,
-    Poll,
+    Poll {
+        #[arg(long = "zellij-session", value_name = "SESSION")]
+        zellij_session: Option<String>,
+    },
+    Loop {
+        #[arg(long = "zellij-session", value_name = "SESSION")]
+        zellij_session: Option<String>,
+    },
     Run {
+        #[arg(short = 'd', long = "debug")]
+        debug: bool,
+        #[arg(long = "zellij-session", value_name = "SESSION")]
+        zellij_session: Option<String>,
         issue: String,
     },
     #[command(hide = true)]

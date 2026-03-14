@@ -2,7 +2,7 @@
 
 Цель этапа:
 
-- понять проблему, пользователя, scope и non-goals
+- понять проблему, пользователя, ожидаемый результат, scope и non-goals
 - сформировать минимально достаточный продуктовый контракт
 - подготовить versioned документы:
   - `README.md`
@@ -12,21 +12,25 @@
 
 - проблема
 - пользователь или роль
+- ожидаемый результат
 - scope
 - non-goals
+- ограничения, предпосылки и допущения
 
 Используй rule-based выбор секций:
 
 - `core`:
   - `Problem`
   - `Who Is It For`
+  - `Outcome`
   - `Scope`
   - `Non-Goals`
+  - `Constraints And Assumptions`
 
 Для `feature` дополнительно:
 
-- `feature story`
-- `use cases`
+- `User Story`
+- `Use Cases`
 
 Для `bug` добавляй:
 
@@ -39,9 +43,8 @@
 - `Motivation`
 - `Operational Goal`
 
-Для `medium` и `large` задач добавляй:
+Для `medium` и `large` задач дополнительно добавляй:
 
-- `Constraints`
 - `Dependencies`
 
 Для `small` задач не создавай лишние секции сверх `core` и минимально нужных

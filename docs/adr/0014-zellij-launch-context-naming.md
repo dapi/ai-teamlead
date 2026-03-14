@@ -1,6 +1,6 @@
 # ADR-0014: Naming contract для `zellij` launch context
 
-Статус: accepted
+Статус: superseded by ADR-0023
 Дата: 2026-03-13
 
 ## Контекст
@@ -23,7 +23,7 @@
 
 Bootstrap-правило для `session_name`:
 
-- по умолчанию `session_name` формируется как `{repo_name}-ai-teamlead`
+- по умолчанию `session_name` хранится как template `${REPO}`
 
 Bootstrap-правило для `tab_name`:
 
@@ -31,7 +31,9 @@ Bootstrap-правило для `tab_name`:
 
 Где:
 
-- `repo_name` это имя текущего git-репозитория
+- `${REPO}` рендерится во время запуска из canonical GitHub repo slug,
+  полученного из `origin`
+- literal-значения `session_name` без placeholder остаются допустимыми
 
 Runtime `zellij` identifiers не хранятся в versioned config:
 
@@ -48,24 +50,34 @@ Runtime `zellij` identifiers не хранятся в versioned config:
 - bootstrap дает предсказуемый launcher context для каждого репозитория
 - разные репозитории не конфликтуют по имени `zellij` session
 - versioned config не загрязняется runtime identifiers
+- `session_name` использует тот же repo identifier, что и `launch_agent.*`
 
 Минусы:
 
 - при ручном удалении или resurrect `zellij` session нужен отдельный runtime
   handling
-- bootstrap должен уметь вычислять `repo_name`
+- runtime должен валидировать, что в `session_name` не остались
+  неразрешенные `${...}`
 
 ## Связанные документы
 
-- [README.md](/home/danil/code/teamlead/README.md)
-- [docs/features/0003-agent-launch-orchestration/README.md](/home/danil/code/teamlead/docs/features/0003-agent-launch-orchestration/README.md)
-- [docs/features/0002-repo-init/README.md](/home/danil/code/teamlead/docs/features/0002-repo-init/README.md)
-- [docs/adr/0012-repo-init-command-and-project-contract-layer.md](/home/danil/code/teamlead/docs/adr/0012-repo-init-command-and-project-contract-layer.md)
-- [docs/adr/0015-versioned-launch-agent-contract.md](/home/danil/code/teamlead/docs/adr/0015-versioned-launch-agent-contract.md)
-- [docs/adr/0016-configurable-analysis-workspace-templates.md](/home/danil/code/teamlead/docs/adr/0016-configurable-analysis-workspace-templates.md)
+- [README.md](../../README.md)
+- [docs/features/0003-agent-launch-orchestration/README.md](../features/0003-agent-launch-orchestration/README.md)
+- [docs/features/0002-repo-init/README.md](../features/0002-repo-init/README.md)
+- [docs/adr/0012-repo-init-command-and-project-contract-layer.md](./0012-repo-init-command-and-project-contract-layer.md)
+- [docs/adr/0015-versioned-launch-agent-contract.md](./0015-versioned-launch-agent-contract.md)
+- [docs/adr/0016-configurable-analysis-workspace-templates.md](./0016-configurable-analysis-workspace-templates.md)
 
 ## Журнал изменений
 
 ### 2026-03-13
 
 - зафиксирован naming contract для `zellij.session_name` и `zellij.tab_name`
+
+### 2026-03-14
+
+- bootstrap placeholder `__SESSION_NAME__` удален из init-шаблона
+- default для `zellij.session_name` переведен на `${REPO}`
+- рендеринг `zellij.session_name` унифицирован с общим template contract
+- дальнейший выбор effective target session вынесен в
+  [ADR-0023](./0023-zellij-session-target-resolution.md)
