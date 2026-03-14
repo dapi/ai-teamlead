@@ -132,7 +132,11 @@ fn run_poll(shell: &dyn Shell) -> Result<()> {
             .analysis_in_progress,
         manifest.session_uuid
     );
-    print_zellij_launch_target(&context.runtime, &manifest.session_uuid, &context.config.zellij);
+    print_zellij_launch_target(
+        &context.runtime,
+        &manifest.session_uuid,
+        &context.config.zellij,
+    );
     Ok(())
 }
 
@@ -239,7 +243,11 @@ fn run_manual_run(shell: &dyn Shell, issue_ref: &str, debug: bool) -> Result<()>
         "run: issue=#{issue_number} relaunched in zellij session_uuid={}",
         manifest.session_uuid
     );
-    print_zellij_launch_target(&context.runtime, &manifest.session_uuid, &context.config.zellij);
+    print_zellij_launch_target(
+        &context.runtime,
+        &manifest.session_uuid,
+        &context.config.zellij,
+    );
     Ok(())
 }
 
