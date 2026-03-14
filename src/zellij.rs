@@ -100,15 +100,14 @@ exec {quoted_launch_agent} {quoted_session_uuid} {quoted_issue_url}\n"
         if session_exists {
             ensure_session_repo_scope(self.shell, repo_root, repo, &zellij.session_name)?;
             // For existing sessions: use `zellij action new-tab` IPC command.
-            // This does not create an attached client and does not need a PTY,
-            // so there is no risk of cascading server shutdown.
-            self.shell.run_with_env(
+            // Clear inherited ZELLIJ_* vars before session-scoped IPC. When
+            // ai-teamlead runs inside another zellij pane, leaking the outer
+            // ZELLIJ_PANE_ID breaks list-panes/new-tab against the target
+            // existing session on zellij 0.44.
+            run_session_scoped_zellij_action(
+                self.shell,
                 repo_root,
-                &[
-                    ("ZELLIJ", "0"),
-                    ("ZELLIJ_SESSION_NAME", &zellij.session_name),
-                ],
-                "zellij",
+                &zellij.session_name,
                 &["action", "new-tab", "--layout", &layout_str],
             )?;
             Ok(())
@@ -133,16 +132,38 @@ exec {quoted_launch_agent} {quoted_session_uuid} {quoted_issue_url}\n"
     }
 }
 
+fn run_session_scoped_zellij_action(
+    shell: &dyn Shell,
+    cwd: &Path,
+    session_name: &str,
+    args: &[&str],
+) -> Result<String> {
+    let mut command = vec![
+        "-u".to_string(),
+        "ZELLIJ".to_string(),
+        "-u".to_string(),
+        "ZELLIJ_SESSION_NAME".to_string(),
+        "-u".to_string(),
+        "ZELLIJ_PANE_ID".to_string(),
+        "ZELLIJ=0".to_string(),
+        format!("ZELLIJ_SESSION_NAME={session_name}"),
+        "zellij".to_string(),
+    ];
+    command.extend(args.iter().map(|arg| arg.to_string()));
+    let command_refs = command.iter().map(String::as_str).collect::<Vec<_>>();
+    shell.run(cwd, "env", &command_refs)
+}
+
 fn ensure_session_repo_scope(
     shell: &dyn Shell,
     repo_root: &Path,
     repo: &RepoContext,
     session_name: &str,
 ) -> Result<()> {
-    let panes_output = shell.run_with_env(
+    let panes_output = run_session_scoped_zellij_action(
+        shell,
         repo_root,
-        &[("ZELLIJ", "0"), ("ZELLIJ_SESSION_NAME", session_name)],
-        "zellij",
+        session_name,
         &["action", "list-panes", "--json", "-a", "-c", "-t", "-s"],
     )?;
     let foreign_repos = find_foreign_repos_in_session(shell, &panes_output, repo)?;
@@ -339,6 +360,7 @@ mod tests {
     #[derive(Default)]
     struct FakeShell {
         responses: BTreeMap<String, String>,
+        runs: RefCell<Vec<String>>,
         spawns: RefCell<Vec<String>>,
         run_with_env_calls: RefCell<Vec<(String, Vec<(String, String)>)>>,
     }
@@ -367,14 +389,22 @@ mod tests {
     impl Shell for FakeShell {
         fn run(&self, _cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
             let cwd_key = format!("cwd={}::{program} {}", _cwd.display(), args.join(" "));
+            self.runs
+                .borrow_mut()
+                .push(format!("{program} {}", args.join(" ")));
             if let Some(value) = self.responses.get(&cwd_key) {
                 return Ok(value.clone());
             }
             let key = format!("{program} {}", args.join(" "));
-            self.responses
-                .get(&key)
-                .cloned()
-                .ok_or_else(|| anyhow!("missing fake response for: {key}"))
+            if let Some(value) = self.responses.get(&key) {
+                return Ok(value.clone());
+            }
+            for (prefix, value) in &self.responses {
+                if key.starts_with(prefix) {
+                    return Ok(value.clone());
+                }
+            }
+            Err(anyhow!("missing fake response for: {key}"))
         }
 
         fn run_with_env(
@@ -520,7 +550,7 @@ mod tests {
         let shell = FakeShell::default()
             .with_response("zellij list-sessions --short", "ai-teamlead")
             .with_response(
-                "zellij action list-panes --json -a -c -t -s",
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID ZELLIJ=0 ZELLIJ_SESSION_NAME=ai-teamlead zellij action list-panes --json -a -c -t -s",
                 &format!(
                     r#"[{{"id":"terminal_1","pane_cwd":"{}"}}]"#,
                     repo_root.display()
@@ -539,7 +569,10 @@ mod tests {
                 &["remote", "get-url", "origin"],
                 "git@github.com:dapi/teamlead.git",
             )
-            .with_response("zellij action new-tab --layout", "");
+            .with_response(
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID ZELLIJ=0 ZELLIJ_SESSION_NAME=ai-teamlead zellij action new-tab --layout",
+                "",
+            );
         let launcher = ZellijLauncher::new(&shell);
         let repo = RepoContext {
             repo_root: repo_root.clone(),
@@ -573,21 +606,23 @@ mod tests {
             "existing session must not use spawn/script"
         );
 
-        // Verify zellij action new-tab was called with correct env
-        let calls = shell.run_with_env_calls.borrow();
-        let zellij_call = calls
+        // Verify existing-session IPC clears inherited ZELLIJ_* vars.
+        let runs = shell.runs.borrow();
+        let zellij_call = runs
             .iter()
-            .find(|(cmd, _)| cmd.contains("zellij action new-tab"))
+            .find(|cmd| cmd.contains("zellij action new-tab --layout"))
             .expect("should call zellij action new-tab");
-        let envs = &zellij_call.1;
         assert!(
-            envs.iter().any(|(k, v)| k == "ZELLIJ" && v == "0"),
-            "must set ZELLIJ=0"
+            zellij_call.contains("env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID"),
+            "existing session IPC must clear inherited ZELLIJ vars, got: {zellij_call}"
         );
         assert!(
-            envs.iter()
-                .any(|(k, v)| k == "ZELLIJ_SESSION_NAME" && v == "ai-teamlead"),
-            "must set ZELLIJ_SESSION_NAME"
+            zellij_call.contains("ZELLIJ_SESSION_NAME=ai-teamlead"),
+            "existing session IPC must target requested session, got: {zellij_call}"
+        );
+        assert!(
+            shell.run_with_env_calls.borrow().is_empty(),
+            "existing session path should not rely on inherited env via run_with_env"
         );
     }
 
@@ -606,7 +641,7 @@ mod tests {
         let shell = FakeShell::default()
             .with_response("zellij list-sessions --short", "ai-teamlead")
             .with_response(
-                "zellij action list-panes --json -a -c -t -s",
+                "env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID ZELLIJ=0 ZELLIJ_SESSION_NAME=ai-teamlead zellij action list-panes --json -a -c -t -s",
                 &format!(
                     r#"[{{"id":"terminal_9","pane_cwd":"{}"}}]"#,
                     foreign_root.display()
