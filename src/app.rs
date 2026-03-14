@@ -14,6 +14,7 @@ use crate::project_files::ProjectPaths;
 use crate::repo::RepoContext;
 use crate::runtime::RuntimeLayout;
 use crate::shell::{Shell, SystemShell};
+use crate::templates::{render_template, render_zellij_session_name};
 use crate::zellij::{ZellijLauncher, capture_current_binding};
 
 pub fn run() -> Result<()> {
@@ -386,7 +387,9 @@ fn load_execution_context(shell: &dyn Shell) -> Result<ExecutionContext> {
 
 fn load_execution_context_at(shell: &dyn Shell, cwd: PathBuf) -> Result<ExecutionContext> {
     let repo = RepoContext::discover(shell, &cwd)?;
-    let config = Config::load_from_repo_root(&repo.repo_root)?;
+    let mut config = Config::load_from_repo_root(&repo.repo_root)?;
+    config.zellij.session_name =
+        render_zellij_session_name(&config.zellij.session_name, &repo.github_repo)?;
     let runtime = RuntimeLayout::from_repo_root(&repo.repo_root);
     runtime.ensure_exists()?;
 
@@ -450,21 +453,14 @@ fn render_launch_agent_context(
     })
 }
 
-fn render_template(template: &str, variables: &[(&str, &str)]) -> String {
-    let mut rendered = template.to_string();
-    for (key, value) in variables {
-        rendered = rendered.replace(&format!("${{{key}}}"), value);
-    }
-    rendered
-}
-
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
 #[cfg(test)]
 mod launch_agent_tests {
-    use super::{LaunchAgentContext, render_template};
+    use super::LaunchAgentContext;
+    use crate::templates::render_template;
 
     #[test]
     fn renders_launch_agent_templates() {
