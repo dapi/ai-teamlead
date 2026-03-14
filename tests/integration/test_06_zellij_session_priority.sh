@@ -9,6 +9,7 @@ GH_LOG="$(mktemp /tmp/ai-teamlead-run-priority-gh-log-XXXXXX)"
 GH_SNAPSHOT="$(mktemp /tmp/ai-teamlead-run-priority-gh-snapshot-XXXXXX)"
 ENV_SESSION="outer-session-$$"
 ARG_SESSION="cli-session-$$"
+TARGET_LAYOUT="$(mktemp /tmp/ai-teamlead-priority-layout-XXXXXX.kdl)"
 
 create_initialized_repo "$REPO_ROOT" "$AI_TEAMLEAD_BIN"
 
@@ -22,6 +23,23 @@ export PATH="$STUB_BIN:$PATH"
 export AI_TEAMLEAD_STUB_AGENT_SLEEP=8
 export ZELLIJ=0
 export ZELLIJ_SESSION_NAME="$ENV_SESSION"
+export ZELLIJ_PANE_ID="terminal_0"
+
+cat > "$TARGET_LAYOUT" <<EOF
+layout {
+  tab name="preexisting-target" {
+    pane command="sleep" {
+      args "120"
+    }
+  }
+}
+EOF
+
+script -qfc "zellij --session '$ARG_SESSION' -n '$TARGET_LAYOUT'" /dev/null &
+TARGET_PID=$!
+sleep 2
+
+assert_session_alive "$ARG_SESSION" "preexisting target zellij session created before run"
 
 RUN_OUTPUT="$(
     cd "$REPO_ROOT"
@@ -50,3 +68,7 @@ assert_eq "$SESSION_NAME" "$ARG_SESSION" "cli zellij session override beats env 
 assert_ne "$PANE_ID" "" "cli override launch captured pane id"
 assert_session_alive "$ARG_SESSION" "cli override created requested zellij session"
 assert_text_contains "$RUN_OUTPUT" "zellij_session=$ARG_SESSION" "run printed cli-selected zellij session"
+
+kill "$TARGET_PID" 2>/dev/null || true
+wait "$TARGET_PID" 2>/dev/null || true
+zellij kill-session "$ARG_SESSION" 2>/dev/null || true
