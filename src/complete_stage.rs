@@ -71,9 +71,8 @@ pub fn run_complete_stage(
     // Step 3: create draft PR (only for plan-ready)
     if matches!(outcome, StageOutcome::PlanReady) && committed {
         let pr_title = format!("analysis(#{issue_number}): {message}");
-        let pr_body = format!(
-            "Ref #{issue_number}\n\nOutcome: plan-ready\nArtifacts: `{artifacts_dir}/`"
-        );
+        let pr_body =
+            format!("Ref #{issue_number}\n\nOutcome: plan-ready\nArtifacts: `{artifacts_dir}/`");
         create_draft_pr_if_needed(shell, &worktree_root, &branch, &pr_title, &pr_body)?;
     }
 
@@ -107,9 +106,7 @@ fn resolve_repo_root(shell: &dyn Shell) -> Result<PathBuf> {
         .lines()
         .find(|l| l.starts_with("worktree "))
         .ok_or_else(|| anyhow::anyhow!("cannot determine primary worktree"))?;
-    Ok(PathBuf::from(
-        first_line.strip_prefix("worktree ").unwrap(),
-    ))
+    Ok(PathBuf::from(first_line.strip_prefix("worktree ").unwrap()))
 }
 
 fn resolve_worktree_root() -> Result<PathBuf> {
@@ -208,9 +205,7 @@ fn update_project_status(
             item.issue_number == manifest.issue_number
                 && item.matches_repo(&manifest.github_owner, &manifest.github_repo)
         })
-        .ok_or_else(|| {
-            anyhow::anyhow!("issue #{} not found in project", manifest.issue_number)
-        })?;
+        .ok_or_else(|| anyhow::anyhow!("issue #{} not found in project", manifest.issue_number))?;
 
     let option_id = snapshot.option_id_by_name(target_status)?;
     github.update_status(
