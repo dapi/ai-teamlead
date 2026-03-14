@@ -22,7 +22,7 @@ GitHub issue: https://github.com/dapi/ai-teamlead/issues/1
 
 ## Связанный контекст
 
-- [../../../docs/features/0001-ai-teamlead-daemon/README.md](../../../docs/features/0001-ai-teamlead-daemon/README.md)
-- [../../../docs/features/0001-ai-teamlead-daemon/04-implementation-plan.md](../../../docs/features/0001-ai-teamlead-daemon/04-implementation-plan.md)
+- [../../../docs/features/0001-ai-teamlead-cli/README.md](../../../docs/features/0001-ai-teamlead-cli/README.md)
+- [../../../docs/features/0001-ai-teamlead-cli/04-implementation-plan.md](../../../docs/features/0001-ai-teamlead-cli/04-implementation-plan.md)
 - [../../../docs/issue-analysis-flow.md](../../../docs/issue-analysis-flow.md)
 - [../../../docs/adr/0021-cli-contract-poll-run-loop.md](../../../docs/adr/0021-cli-contract-poll-run-loop.md)

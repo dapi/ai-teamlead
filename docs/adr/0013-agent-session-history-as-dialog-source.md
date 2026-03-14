@@ -68,9 +68,9 @@
 
 ## Связанные документы
 
-- [docs/issue-analysis-flow.md](/home/danil/code/teamlead/docs/issue-analysis-flow.md)
-- [docs/features/0001-ai-teamlead-daemon/05-runtime-artifacts.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/05-runtime-artifacts.md)
-- [docs/adr/0008-bind-issue-to-agent-session-uuid.md](/home/danil/code/teamlead/docs/adr/0008-bind-issue-to-agent-session-uuid.md)
+- [docs/issue-analysis-flow.md](../issue-analysis-flow.md)
+- [docs/features/0001-ai-teamlead-cli/05-runtime-artifacts.md](../features/0001-ai-teamlead-cli/05-runtime-artifacts.md)
+- [docs/adr/0008-bind-issue-to-agent-session-uuid.md](./0008-bind-issue-to-agent-session-uuid.md)
 
 ## Журнал изменений
 

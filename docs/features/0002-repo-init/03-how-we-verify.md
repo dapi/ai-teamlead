@@ -120,9 +120,9 @@ Corner cases первой версии должны быть покрыты ав
 
 ## Связанные документы
 
-- [README.md](/home/danil/code/teamlead/README.md)
-- [docs/adr/0012-repo-init-command-and-project-contract-layer.md](/home/danil/code/teamlead/docs/adr/0012-repo-init-command-and-project-contract-layer.md)
-- [docs/adr/0004-runtime-artifacts-in-git-dir.md](/home/danil/code/teamlead/docs/adr/0004-runtime-artifacts-in-git-dir.md)
+- [README.md](../../../README.md)
+- [docs/adr/0012-repo-init-command-and-project-contract-layer.md](../../adr/0012-repo-init-command-and-project-contract-layer.md)
+- [docs/adr/0004-runtime-artifacts-in-git-dir.md](../../adr/0004-runtime-artifacts-in-git-dir.md)
 
 ## Открытые вопросы
 

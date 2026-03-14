@@ -91,6 +91,6 @@
 ## Связанные документы
 
 - [../issue-analysis-flow.md](../issue-analysis-flow.md)
-- [../features/0001-ai-teamlead-daemon/README.md](../features/0001-ai-teamlead-daemon/README.md)
+- [../features/0001-ai-teamlead-cli/README.md](../features/0001-ai-teamlead-cli/README.md)
 - [./0002-standalone-foreground-daemon.md](./0002-standalone-foreground-daemon.md)
 - [./0005-cli-contract-for-poll-and-run.md](./0005-cli-contract-for-poll-and-run.md)

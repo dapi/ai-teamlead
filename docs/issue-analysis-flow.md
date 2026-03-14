@@ -778,11 +778,11 @@ Issue должна переводиться в `Analysis Blocked`, если:
 
 ## Связанные документы
 
-- [docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md](/home/danil/code/teamlead/docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md)
-- [docs/adr/0019-conditional-sections-by-task-type-project-type-and-size.md](/home/danil/code/teamlead/docs/adr/0019-conditional-sections-by-task-type-project-type-and-size.md)
-- [docs/adr/0013-agent-session-history-as-dialog-source.md](/home/danil/code/teamlead/docs/adr/0013-agent-session-history-as-dialog-source.md)
-- [docs/implementation-plan.md](/home/danil/code/teamlead/docs/implementation-plan.md)
-- [docs/features/0001-ai-teamlead-daemon/README.md](/home/danil/code/teamlead/docs/features/0001-ai-teamlead-daemon/README.md)
+- [docs/adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md](adr/0017-minimal-sdd-artifact-set-for-issue-analysis.md)
+- [docs/adr/0019-conditional-sections-by-task-type-project-type-and-size.md](adr/0019-conditional-sections-by-task-type-project-type-and-size.md)
+- [docs/adr/0013-agent-session-history-as-dialog-source.md](adr/0013-agent-session-history-as-dialog-source.md)
+- [docs/implementation-plan.md](./implementation-plan.md)
+- [docs/features/0001-ai-teamlead-cli/README.md](features/0001-ai-teamlead-cli/README.md)
 
 ## Журнал изменений
 
