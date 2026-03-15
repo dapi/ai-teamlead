@@ -4,16 +4,8 @@ set -euo pipefail
 REPO_ROOT="$(mktemp -d /tmp/ai-teamlead-zellij-template-XXXXXX)"
 create_test_repo "$REPO_ROOT"
 
-python3 - <<'PY' "$REPO_ROOT/.ai-teamlead/settings.yml"
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-text = path.read_text()
-needle = '  tab_name: "issue-analysis"\n'
-replacement = needle + '  tab_name_template: "#${ISSUE_NUMBER}"\n'
-path.write_text(text.replace(needle, replacement, 1))
-PY
+sed -i '/^  tab_name: "issue-analysis"$/a\  tab_name_template: "#${ISSUE_NUMBER}"' \
+    "$REPO_ROOT/.ai-teamlead/settings.yml"
 
 AI_TEAMLEAD_BIN="/test/bin/ai-teamlead"
 
