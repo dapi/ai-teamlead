@@ -14,10 +14,10 @@ contract, а не как новую перепридуманную модель.
   `0029/0030` как канонический источник требований;
 - добавить в runtime детерминированное вычисление `repo_visibility` и
   `operating_mode` до входа в execution path;
-- внедрить intake layer для public repos, который ограничивает auto-start по
-  issue author policy, но не повышает trust comments;
+- внедрить intake layer для public repos, который различает `poll`-auto-intake
+  и explicit `run`, но не повышает trust comments;
 - маркировать действия по типу риска и направлять high-risk actions в явные
-  permission gates;
+  permission gates по фиксированной policy-матрице;
 - выровнять launcher, prompts, diagnostics и publication path с тем же
   security contract, чтобы policy не жила только в тексте документов.
 
@@ -30,14 +30,15 @@ contract, а не как новую перепридуманную модель.
   stage-aware `run`/`poll` orchestration, decision points для intake, mode
   resolution и отказов policy;
 - `src/config.rs`:
-  будущая config surface для security policy, allowlist и safe-mode override;
+  config surface для security policy, allowlist, approval channel и
+  `public-safe` override;
 - `src/shell.rs`:
   execution gate для опасных команд и diagnostics по отказам;
 - `src/complete_stage.rs` и publication path:
   защита от публикации локальных чувствительных данных;
 - `.ai-teamlead/launch-agent.sh` и staged prompts:
-  выравнивание operator messaging и различение `operator intent` против
-  hostile content;
+  выравнивание operator messaging, approval path и различение
+  `operator intent` против hostile content;
 - `docs/untrusted-input-security.md`, feature `0006`, ADR `0029/0030`:
   возможная синхронизация, если implementation уточнит config/runtime детали;
 - `tests/integration/` и `.ai-teamlead/tests/agent-flow/`:
@@ -50,24 +51,32 @@ contract, а не как новую перепридуманную модель.
 - `repo_visibility`: `public`, `private`, `unknown`;
 - `operating_mode`: `standard`, `public-safe`;
 - `intake_policy`: `owner-only`, `allowlist`, `open-intake`;
+- `intake_decision`: `eligible`, `manual-override`, `skipped`, `denied`;
 - `input_trust_class`: `trusted-control`, `semi-trusted-repo`, `untrusted`,
   `sensitive-local`;
 - `approval_state`: `not-required`, `required`, `granted`, `denied`.
+- `approval_record`: `session_uuid`, `issue_number`, `action_kind`,
+  `target_fingerprint`, `operator_response`, `granted_at`, `expires_at`.
 
 Минимальные правила обработки:
 
 - `repo_visibility = public` всегда включает `operating_mode = public-safe`;
 - `repo_visibility = unknown` не может ослаблять ограничения;
-- `intake_policy` влияет только на auto-start, но не повышает trust-класс
-  issue thread;
+- для `operating_mode = public-safe` допустимы только `owner-only` и
+  `allowlist`; `open-intake` разрешен только для `standard` режима;
+- `poll` работает только с `intake_decision = eligible`;
+- explicit `run` по issue вне intake policy приводит к
+  `intake_decision = manual-override`, но не повышает trust-класс issue
+  thread;
 - `input_trust_class = untrusted` не может инициировать собственное повышение
   привилегий;
 - `approval_state = granted` относится к конкретному действию, а не к
   неограниченному сеансу целиком.
-- `approval_state = granted` может появиться только из trusted operator channel,
-  например явного ответа в agent session или другого отдельного trusted
-  mechanism; issue body, comments, repo-local docs и runtime output не могут
-  выступать источником approval.
+- `approval_state = granted` в MVP может появиться только из явного ответа
+  оператора в agent session; issue body, comments, repo-local docs и runtime
+  output не могут выступать источником approval.
+- `approval_record` должен записываться в runtime audit trail и быть привязан к
+  конкретному risky action, session и моменту времени.
 
 Ключевые интерфейсы:
 
@@ -78,21 +87,74 @@ contract, а не как новую перепридуманную модель.
 - shell execution layer, который должен различать обычное исполнение и
   dangerous execution;
 - publication path, который должен учитывать риск data exfiltration;
-- trusted operator channel, через который runtime получает explicit approval для
-  конкретного high-risk action;
+- trusted operator channel в MVP, через который runtime получает explicit
+  approval для конкретного high-risk action;
 - project-local prompts и launcher context, которые не должны трактовать
   hostile content как trusted instruction.
 
+## Bootstrap Order And Trust Boundaries
+
+Порядок применения security policy должен быть таким:
+
+1. загрузить trusted local control plane:
+   локальные системные инструкции, CLI/runtime contract, versioned governance
+   самого установленного `ai-teamlead`;
+2. определить repo context и попытаться вычислить `repo_visibility`;
+3. выбрать `operating_mode` и `intake_decision` fail-closed способом;
+4. только после этого читать target issue, comments, repo-local docs и runtime
+   outputs как task input;
+5. перед каждым risky action применять policy-матрицу и при необходимости
+   запрашивать approval через agent session.
+
+Явное различение двух классов repo-local документации:
+
+- локальный contract layer самого `ai-teamlead`, с которым оператор запускает
+  workflow, относится к trusted control plane;
+- repo-local docs целевого public repo, читаемые как часть задачи, относятся к
+  hostile-by-default input и не могут сами менять permission model.
+
+`repo_visibility` должен вычисляться по следующему приоритету:
+
+1. каноническая GitHub metadata о visibility репозитория;
+2. fallback по repo metadata, которую можно надежно получить через локальный
+   git/gh context без чтения issue content;
+3. `unknown`, если reliable metadata не удалось получить.
+
+## Risk Policy Matrix
+
+Для `public-safe` режима минимальная policy-матрица должна быть такой:
+
+| Категория | Allow | Approval | Deny |
+| --- | --- | --- | --- |
+| `filesystem` | чтение и запись внутри repo/worktree и разрешенного runtime-dir | разовое чтение явно указанного оператором несекретного пути вне repo/worktree | чтение `~/.ssh`, `~/.aws`, `~/.config`, `/proc/self/environ`, `.env` вне repo; любая запись вне repo/worktree/runtime-dir |
+| `network` | канонический GitHub control plane, нужный для работы `ai-teamlead` | открытие внешней ссылки или скачивание контента с operator-approved allowlisted host | доступ к non-allowlisted host; отправка локальных файлов/секретов наружу |
+| `execution` | inspect/build/test/edit команды, ограниченные repo/worktree и штатным toolchain | точечный запуск operator-approved команды вне baseline toolchain, если она все еще ограничена approved scope | `sudo`, системные package managers, sandbox escalation, destructive host-level commands, redirection вне repo/worktree |
+| `publication` | публикация versioned artifacts и workflow metadata в канонический GitHub path после secret-scrub | публикация явно одобренного оператором несекретного фрагмента вне обычного workflow | публикация secret data, raw credentials, локальных config dumps, сырых runtime artifacts с чувствительным содержимым, uploads во внешние сервисы |
+
+Если действие не попало ни в одну allow/approval-категорию, оно трактуется как
+`deny` в `public-safe` режиме.
+
 ## Configuration And Runtime Assumptions
 
-- текущий `settings.yml` пока не содержит финальную security schema, поэтому
-  первая реализация должна быть fail-closed и не опираться на отсутствие полей
-  как на разрешение;
+- текущий `settings.yml` пока не содержит полной security schema, но issue
+  фиксирует минимальный draft contract, который implementation должен
+  использовать как source of truth;
+- отсутствие security-поля не должно ослаблять policy;
 - default policy для public repos должна быть безопасной даже без явной
   конфигурации;
 - если visibility не удается определить через GitHub metadata, runtime должен
   оставаться в `public-safe`;
+- минимальная repo-level security schema для MVP должна покрывать:
+  - `security.public_repo.operating_mode`: `auto` | `force-public-safe`
+  - `security.public_repo.intake_policy`: `owner-only` | `allowlist`
+  - `security.public_repo.issue_author_allowlist`: список логинов
+  - `security.network.allow_hosts`: список host allowlist
+  - `security.approval.channel = agent-session`
+  - `security.approval.audit_log = true`
 - enforcement нельзя сводить только к системному prompt или дисциплине модели;
+- текущие launcher defaults, документированные вне этой issue, являются
+  pre-security-baseline состоянием и должны быть приведены в соответствие с
+  approval contract для `public-safe` режима;
 - проверки, затрагивающие `zellij`, допустимы только в headless path и не
   должны использовать host `zellij` пользователя.
 
@@ -106,6 +168,8 @@ contract, а не как новую перепридуманную модель.
   временно недоступного GitHub API или деградировавших metadata;
 - publication path легко упустить, хотя именно там возможна утечка локальных
   данных наружу;
+- если не зафиксировать lifecycle approval и audit trail, реализация быстро
+  разойдется между prompt-layer, launcher-ом и runtime;
 - если diagnostics не будут объяснять причину отказа, оператор начнет обходить
   policy вручную.
 
@@ -117,6 +181,9 @@ contract, а не как новую перепридуманную модель.
   а не размазывать по call sites;
 - repo-local docs, `AGENTS.md` и `.ai-teamlead/` assets не должны быть
   неявным способом расширить filesystem или network scope;
+- explicit approval в MVP должен приходить только через agent session и
+  логироваться как отдельный runtime artifact, а не растворяться в общей
+  истории диалога без action binding;
 - shell output, test logs и generated artifacts нужно рассматривать как
   `untrusted` продолжение hostile scenario, если они возникли из обработки
   недоверенного issue;
@@ -154,6 +221,11 @@ ADR `0029` и `0030`.
 
    Отклонено: comments остаются отдельным hostile input channel даже внутри
    owner-authored issue.
+
+4. Разрешить `open-intake` и для `public-safe` режима.
+
+   Отклонено: это разрушает baseline из owner/allowlist intake и противоречит
+   fail-closed модели public repos.
 
 ## Migration Or Rollout Notes
 

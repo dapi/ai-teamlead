@@ -18,6 +18,10 @@ Issue требует не локальной правки, а отдельног
 сценария `public repo -> GitHub content/repo content/runtime outputs ->
 ai-teamlead -> local machine`.
 
+Этот issue-level пакет является feature-spec по security baseline. Формулировка
+`Security review` относится к типу исследовательской задачи, а результатом
+должен быть именно implementation-ready feature contract для runtime.
+
 Ключевой результат анализа:
 
 - threat model и contract pack по теме уже зафиксированы в feature
@@ -76,8 +80,13 @@ implementation plan, который связывает security contract с roll
 - вычислять `repo_visibility` и `operating_mode` до запуска действий с риском;
 - вводить `public-safe` режим как fail-closed baseline для `public` и
   `unknown` visibility;
+- использовать в MVP единственный trusted approval channel: явный ответ
+  оператора в agent session, привязанный к конкретному risky action;
 - ограничивать auto-intake policy для public repos и не считать comments
-  trusted даже внутри owner-authored issue;
+  trusted даже внутри owner-authored issue; явный `run` допускает
+  `manual-override`, но не ослабляет security policy;
+- фиксировать policy-матрицу для `filesystem`, `network`, `execution` и
+  `publication`, включая `allow`, `approval` и `deny`;
 - пропускать filesystem/network/execution/publication actions через явные
   permission gates;
 - выровнять runtime enforcement, project-local prompts, launcher и диагностику
@@ -94,4 +103,6 @@ implementation plan, который связывает security contract с roll
 - как именно runtime определяет `repo_visibility` и какой fallback используется
   при частичной недоступности GitHub metadata;
 - насколько глубоко нужно ограничивать repo-local assets в `public-safe`
-  режиме на первом implementation этапе.
+  режиме на первом implementation этапе;
+- нужен ли после MVP дополнительный trusted approval mechanism сверх agent
+  session.

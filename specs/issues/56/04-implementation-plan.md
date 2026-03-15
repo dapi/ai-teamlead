@@ -16,6 +16,7 @@ permission gates и verification появились в runtime как согла
 
 - visibility и operating-mode resolution для public/private/unknown repos;
 - intake policy для auto-start в public repos;
+- approval contract и runtime audit trail;
 - permission gates для filesystem, network, execution и publication actions;
 - выравнивание launcher, prompts, diagnostics и verification вокруг
   `public-safe` режима.
@@ -76,17 +77,20 @@ permission gates и verification появились в runtime как согла
   implementation;
 - runtime сегодня не содержит полного enforcement baseline для hostile-input
   paths;
+- current launcher defaults и repo-level config docs еще не выровнены с
+  целевым approval contract этой feature;
 - проверки для `zellij`-связанных сценариев должны идти только в headless path;
 - public repo support нельзя считать production-ready до появления хотя бы
   минимального runtime enforcement.
 
 ## Порядок работ
 
-### Этап 1. Ввести visibility и operating-mode resolution
+### Этап 1. Зафиксировать bootstrap-order, visibility resolution и intake contract
 
 Цель:
 
-- дать каждому запуску явный security mode до начала risky actions.
+- дать каждому запуску явный `public-safe` decision path до начала risky
+  actions.
 
 Основание:
 
@@ -96,43 +100,48 @@ permission gates и verification появились в runtime как согла
 
 Результат этапа:
 
+- определен bootstrap-order для trusted local control plane и hostile task
+  inputs;
 - runtime умеет определять `repo_visibility`;
 - `public` и `unknown` visibility приводят к `public-safe`;
+- зафиксированы правила `poll` vs explicit `run`, включая `manual-override`;
 - diagnostics показывают выбранный `operating_mode`.
 
 Проверка:
 
 - unit tests на mode resolution;
+- unit tests на intake decision;
 - integration checks для `public`, `private` и `unknown` cases.
 
-### Этап 2. Добавить intake policy для public repos
+### Этап 2. Ввести approval contract и policy-матрицу risky actions
 
 Цель:
 
-- ограничить auto-start hostile issue еще до входа в agent workflow.
+- превратить risky actions в проверяемый contract, а не в свободную эвристику.
 
 Основание:
 
-- [01-what-we-build.md](./01-what-we-build.md)
+- [02-how-we-build.md](./02-how-we-build.md)
+- [03-how-we-verify.md](./03-how-we-verify.md)
 - [../../../docs/untrusted-input-security.md](../../../docs/untrusted-input-security.md)
-- [../../../docs/adr/0030-public-repo-safe-mode-and-permission-gates.md](../../../docs/adr/0030-public-repo-safe-mode-and-permission-gates.md)
 
 Результат этапа:
 
-- `poll` и `run` учитывают author-based intake policy для public repos;
-- owner-authored issue рассматривается только как intake gate;
-- comments остаются hostile-by-default и не получают trust upgrade.
+- approval в MVP может приходить только из agent session;
+- approval привязывается к `session_uuid`, `action_kind` и target;
+- policy-матрица `allow`/`approval`/`deny` зафиксирована для `filesystem`,
+  `network`, `execution`, `publication`.
 
 Проверка:
 
-- unit tests для author-policy resolution;
-- integration tests на deny/skip behavior для issue вне allowlist.
+- unit tests для approval source validation и policy matrix;
+- integration tests на deny/approval behavior по всем gate-категориям.
 
-### Этап 3. Внедрить permission gates для high-risk actions
+### Этап 3. Внедрить intake policy, permission gates и publication boundaries
 
 Цель:
 
-- сделать filesystem, network, execution и publication paths enforce-able.
+- сделать intake, gate-решения и publication path enforce-able в runtime.
 
 Основание:
 
@@ -142,9 +151,12 @@ permission gates и verification появились в runtime как согла
 
 Результат этапа:
 
+- `poll` obeys intake policy, а explicit `run` поддерживает только
+  `manual-override` без trust upgrade;
 - risky actions классифицируются как минимум по четырем gate-категориям;
 - dangerous execution, access вне repo/worktree и публикация потенциально
   чувствительных данных либо требуют approval, либо запрещаются;
+- publication path различает канонический GitHub workflow и внешние uploads;
 - diagnostics объясняют причину deny/approval без утечки секретов.
 
 Проверка:
@@ -153,7 +165,7 @@ permission gates и verification появились в runtime как согла
 - integration tests на deny/approval paths;
 - hostile-input scenarios для data exfiltration и execution abuse.
 
-### Этап 4. Синхронизировать prompts, launcher и verification
+### Этап 4. Синхронизировать prompts, launcher defaults, config и verification
 
 Цель:
 
@@ -168,13 +180,18 @@ permission gates и verification появились в runtime как согла
 Результат этапа:
 
 - project-local prompts явно различают `operator intent` и hostile content;
-- launcher и runtime messaging показывают security mode и причину блокировок;
+- launcher defaults, config docs и runtime messaging не противоречат approval
+  contract;
+- launcher и runtime messaging показывают `public-safe` режим и причину
+  блокировок;
 - headless verification покрывает hostile issue, comments, repo-local docs и
   runtime outputs.
 
 Проверка:
 
 - review prompt-layer и launcher assets;
+- review `docs/config.md`, `settings.yml` template и launch defaults на
+  совместимость с approval contract;
 - headless agent-flow scenarios без использования host `zellij`.
 
 ## Критерий завершения
@@ -182,6 +199,9 @@ permission gates и verification появились в runtime как согла
 - `public-safe` режим детерминированно включается для `public` и `unknown`
   visibility;
 - auto-intake для public repos не стартует hostile issue вне выбранной policy;
+- explicit `run` вне intake policy работает только как `manual-override` без
+  trust upgrade;
+- approval в MVP приходит только из agent session и логируется в audit trail;
 - high-risk actions проходят через enforce-able permission gates;
 - operator получает понятную диагностику причин deny/approval;
 - docs, prompts, config surface и tests синхронизированы с runtime behavior.
