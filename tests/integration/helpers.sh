@@ -282,6 +282,17 @@ if [[ "${1:-}" == "repo" && "${2:-}" == "view" ]]; then
     exit 0
 fi
 
+if [[ "${1:-}" == "issue" && "${2:-}" == "view" ]]; then
+    issue_number="${3:-42}"
+    repo_ref="${5:-dapi/example}"
+    printf '{"number":%s,"title":"Issue %s","body":"","url":"https://github.com/%s/issues/%s"}\n' \
+        "$issue_number" \
+        "$issue_number" \
+        "$repo_ref" \
+        "$issue_number"
+    exit 0
+fi
+
 if [[ "${1:-}" == "pr" && "${2:-}" == "list" ]]; then
     printf '%s\n' "${AI_TEAMLEAD_TEST_GH_PR_LIST_RESULT:-[]}"
     exit 0
