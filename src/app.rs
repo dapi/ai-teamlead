@@ -8,7 +8,7 @@ use clap::Parser;
 
 use crate::cli::{Cli, Command, InternalCommand};
 use crate::complete_stage::run_complete_stage;
-use crate::config::Config;
+use crate::config::{Config, LaunchTarget};
 use crate::domain::{
     FlowStage, decide_run_stage, parse_issue_ref, select_next_backlog_project_item,
 };
@@ -33,7 +33,14 @@ pub fn run() -> Result<()> {
             issue,
             debug,
             zellij_session,
-        } => run_manual_run(&shell, &issue, debug, zellij_session.as_deref()),
+            launch_target,
+        } => run_manual_run(
+            &shell,
+            &issue,
+            debug,
+            zellij_session.as_deref(),
+            launch_target,
+        ),
         Command::Internal { internal } => run_internal(&shell, internal),
     }
 }
@@ -73,7 +80,7 @@ fn run_poll(shell: &dyn Shell, zellij_session_override: Option<&str>) -> Result<
         }
         PollCycleOutcome::Launched(launch) => {
             let launch_zellij =
-                resolve_launch_zellij_config(&context.config.zellij, launch.issue_number)?;
+                resolve_launch_zellij_config(&context.config.zellij, launch.issue_number, None)?;
             println!(
                 "poll: claimed issue #{} -> {} session_uuid={}",
                 launch.issue_number,
@@ -107,8 +114,11 @@ fn run_loop(shell: &dyn Shell, zellij_session_override: Option<&str>) -> Result<
                 );
             }
             Ok(PollCycleOutcome::Launched(launch)) => {
-                let launch_zellij =
-                    resolve_launch_zellij_config(&context.config.zellij, launch.issue_number)?;
+                let launch_zellij = resolve_launch_zellij_config(
+                    &context.config.zellij,
+                    launch.issue_number,
+                    None,
+                )?;
                 println!(
                     "loop: cycle={cycle_number} launched issue #{} session_uuid={}",
                     launch.issue_number, launch.session_uuid
@@ -159,7 +169,7 @@ fn run_poll_cycle(
         });
     };
 
-    let launch = run_issue_entrypoint(context, github, zellij, &snapshot, issue, false)?;
+    let launch = run_issue_entrypoint(context, github, zellij, &snapshot, issue, false, None)?;
     Ok(PollCycleOutcome::Launched(launch))
 }
 
@@ -168,6 +178,7 @@ fn run_manual_run(
     issue_ref: &str,
     debug: bool,
     zellij_session_override: Option<&str>,
+    launch_target_override: Option<LaunchTarget>,
 ) -> Result<()> {
     let context = load_execution_context(shell, zellij_session_override)?;
     let github = GhProjectClient::new(shell);
@@ -186,8 +197,20 @@ fn run_manual_run(
         })
         .ok_or_else(|| anyhow::anyhow!("issue #{issue_number} is not linked to the project"))?;
 
-    let launch_zellij = resolve_launch_zellij_config(&context.config.zellij, issue.issue_number)?;
-    let launch = run_issue_entrypoint(&context, &github, &zellij, &snapshot, issue, debug)?;
+    let launch = run_issue_entrypoint(
+        &context,
+        &github,
+        &zellij,
+        &snapshot,
+        issue,
+        debug,
+        launch_target_override,
+    )?;
+    let launch_zellij = resolve_launch_zellij_config(
+        &context.config.zellij,
+        issue.issue_number,
+        launch_target_override,
+    )?;
     println!(
         "run: issue=#{} launched in zellij session_uuid={}",
         launch.issue_number, launch.session_uuid
@@ -203,6 +226,7 @@ fn run_issue_entrypoint(
     snapshot: &ProjectSnapshot,
     issue: &ProjectIssueItem,
     debug: bool,
+    launch_target_override: Option<LaunchTarget>,
 ) -> Result<LaunchOutcome> {
     let current_status = issue.status_name.as_deref().ok_or_else(|| {
         anyhow::anyhow!(
@@ -235,7 +259,11 @@ fn run_issue_entrypoint(
             .with_context(|| format!("failed to validate {} preconditions", stage.as_str()));
     }
 
-    let launch_zellij = resolve_launch_zellij_config(&context.config.zellij, issue.issue_number)?;
+    let launch_zellij = resolve_launch_zellij_config(
+        &context.config.zellij,
+        issue.issue_number,
+        launch_target_override,
+    )?;
     let manifest = prepare_session_manifest(
         context,
         github,
@@ -511,7 +539,11 @@ fn print_zellij_launch_target(
         .unwrap_or("pending");
 
     println!(
-        "launch target: zellij_session={} tab={} tab_id={} pane_id={} log={}",
+        "launch target: launch_target={} zellij_session={} tab={} tab_id={} pane_id={} log={}",
+        manifest
+            .as_ref()
+            .map(|session| session.zellij.launch_target.as_str())
+            .unwrap_or(zellij.launch_target.as_str()),
         session_id,
         tab_name,
         tab_id,
@@ -579,7 +611,7 @@ fn run_internal_bind_zellij_pane(shell: &dyn Shell, session_uuid: &str) -> Resul
 
 fn run_internal_launch_zellij_fixture(shell: &dyn Shell, issue_number: u64) -> Result<()> {
     let context = load_execution_context(shell, None)?;
-    let launch_zellij = resolve_launch_zellij_config(&context.config.zellij, issue_number)?;
+    let launch_zellij = resolve_launch_zellij_config(&context.config.zellij, issue_number, None)?;
     let manifest = context.runtime.create_claim_binding(
         &context.repo,
         &context.config.github.project_id,
@@ -709,13 +741,20 @@ fn resolve_zellij_session_name(
 fn resolve_launch_zellij_config(
     zellij: &crate::config::ZellijConfig,
     issue_number: u64,
+    launch_target_override: Option<LaunchTarget>,
 ) -> Result<crate::config::ZellijConfig> {
     let mut resolved = zellij.clone();
-    resolved.tab_name = render_zellij_tab_name(
-        &zellij.tab_name,
-        zellij.tab_name_template.as_deref(),
-        issue_number,
-    )?;
+    if let Some(launch_target_override) = launch_target_override {
+        resolved.launch_target = launch_target_override;
+    }
+    resolved.tab_name = match resolved.launch_target {
+        LaunchTarget::Pane => zellij.tab_name.clone(),
+        LaunchTarget::Tab => render_zellij_tab_name(
+            &zellij.tab_name,
+            zellij.tab_name_template.as_deref(),
+            issue_number,
+        )?,
+    };
     Ok(resolved)
 }
 
@@ -805,7 +844,7 @@ fn render_launch_agent_context(
 #[cfg(test)]
 mod tests {
     use super::{resolve_launch_zellij_config, resolve_zellij_session_name};
-    use crate::config::ZellijConfig;
+    use crate::config::{LaunchTarget, ZellijConfig};
 
     #[test]
     fn zellij_session_override_has_highest_priority() {
@@ -840,11 +879,12 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "example".into(),
             tab_name: "issue-analysis".into(),
+            launch_target: LaunchTarget::Tab,
             tab_name_template: Some("#${ISSUE_NUMBER}".into()),
             layout: None,
         };
 
-        let resolved = resolve_launch_zellij_config(&zellij, 42).expect("resolved config");
+        let resolved = resolve_launch_zellij_config(&zellij, 42, None).expect("resolved config");
         assert_eq!(resolved.tab_name, "#42");
     }
 
@@ -853,12 +893,44 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "example".into(),
             tab_name: "issue-analysis".into(),
+            launch_target: LaunchTarget::Pane,
             tab_name_template: None,
             layout: None,
         };
 
-        let resolved = resolve_launch_zellij_config(&zellij, 42).expect("resolved config");
+        let resolved = resolve_launch_zellij_config(&zellij, 42, None).expect("resolved config");
         assert_eq!(resolved.tab_name, "issue-analysis");
+    }
+
+    #[test]
+    fn pane_launch_target_ignores_issue_aware_tab_template() {
+        let zellij = ZellijConfig {
+            session_name: "example".into(),
+            tab_name: "issue-analysis".into(),
+            launch_target: LaunchTarget::Pane,
+            tab_name_template: Some("#${ISSUE_NUMBER}".into()),
+            layout: None,
+        };
+
+        let resolved = resolve_launch_zellij_config(&zellij, 42, None).expect("resolved config");
+        assert_eq!(resolved.launch_target, LaunchTarget::Pane);
+        assert_eq!(resolved.tab_name, "issue-analysis");
+    }
+
+    #[test]
+    fn cli_launch_target_override_beats_settings() {
+        let zellij = ZellijConfig {
+            session_name: "example".into(),
+            tab_name: "issue-analysis".into(),
+            launch_target: LaunchTarget::Pane,
+            tab_name_template: Some("#${ISSUE_NUMBER}".into()),
+            layout: None,
+        };
+
+        let resolved = resolve_launch_zellij_config(&zellij, 42, Some(LaunchTarget::Tab))
+            .expect("resolved config");
+        assert_eq!(resolved.launch_target, LaunchTarget::Tab);
+        assert_eq!(resolved.tab_name, "#42");
     }
 }
 
@@ -884,7 +956,7 @@ mod launch_agent_tests {
     use crate::config::{
         Config, FlowStatuses, GithubConfig, ImplementationFlowStatuses, IssueAnalysisFlowConfig,
         IssueImplementationFlowConfig, LaunchAgentConfig, LaunchAgentGlobalArgsConfig,
-        RuntimeConfig, ZellijConfig,
+        LaunchTarget, RuntimeConfig, ZellijConfig,
     };
     use crate::domain::FlowStage;
     use crate::repo::RepoContext;
@@ -1030,6 +1102,7 @@ mod launch_agent_tests {
                 zellij: ZellijConfig {
                     session_name: "example".into(),
                     tab_name: "issue-analysis".into(),
+                    launch_target: LaunchTarget::Pane,
                     tab_name_template: None,
                     layout: None,
                 },

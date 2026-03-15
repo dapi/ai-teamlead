@@ -438,7 +438,7 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use crate::config::{ImplementationFlowStatuses, ZellijConfig};
+    use crate::config::{ImplementationFlowStatuses, LaunchTarget, ZellijConfig};
     use crate::domain::FlowStage;
     use crate::repo::RepoContext;
     use crate::runtime::RuntimeLayout;
@@ -673,6 +673,7 @@ mod tests {
                 &ZellijConfig {
                     session_name: "teamlead".into(),
                     tab_name: "issue-analysis".into(),
+                    launch_target: LaunchTarget::Pane,
                     tab_name_template: None,
                     layout: None,
                 },
@@ -749,6 +750,7 @@ mod tests {
                 &ZellijConfig {
                     session_name: "teamlead".into(),
                     tab_name: "issue-analysis".into(),
+                    launch_target: LaunchTarget::Pane,
                     tab_name_template: None,
                     layout: None,
                 },
@@ -831,6 +833,7 @@ mod tests {
                 &ZellijConfig {
                     session_name: "teamlead".into(),
                     tab_name: "issue-analysis".into(),
+                    launch_target: LaunchTarget::Pane,
                     tab_name_template: None,
                     layout: None,
                 },
@@ -926,6 +929,7 @@ mod tests {
                 &ZellijConfig {
                     session_name: "teamlead".into(),
                     tab_name: "issue-analysis".into(),
+                    launch_target: LaunchTarget::Pane,
                     tab_name_template: None,
                     layout: None,
                 },

@@ -6,6 +6,8 @@ create_test_repo "$REPO_ROOT"
 
 sed -i '/^  tab_name: "issue-analysis"$/a\  tab_name_template: "#${ISSUE_NUMBER}"' \
     "$REPO_ROOT/.ai-teamlead/settings.yml"
+sed -i 's/^  launch_target: "pane"$/  launch_target: "tab"/' \
+    "$REPO_ROOT/.ai-teamlead/settings.yml"
 
 AI_TEAMLEAD_BIN="/test/bin/ai-teamlead"
 
