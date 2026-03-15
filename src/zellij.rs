@@ -17,8 +17,8 @@ use crate::shell::Shell;
 const ANALYSIS_TAB_TEMPLATE_PATH: &str = ".ai-teamlead/zellij/analysis-tab.kdl";
 const ANALYSIS_TAB_TEMPLATE_NAME_PLACEHOLDER: &str = "${TAB_NAME}";
 const ANALYSIS_TAB_TEMPLATE_ENTRYPOINT_PLACEHOLDER: &str = "${PANE_ENTRYPOINT}";
-const BINDING_CAPTURE_ATTEMPTS: usize = 10;
-const BINDING_CAPTURE_RETRY_DELAY: Duration = Duration::from_millis(200);
+const BINDING_CAPTURE_ATTEMPTS: usize = 20;
+const BINDING_CAPTURE_RETRY_DELAY: Duration = Duration::from_millis(100);
 
 pub struct ZellijLauncher<'a> {
     shell: &'a dyn Shell,
@@ -398,24 +398,37 @@ fn capture_current_binding_with_ids(
     session_id: &str,
     pane_id: &str,
 ) -> Result<(String, String, String)> {
+    let (tab_id, _, _) = resolve_current_tab_binding(shell, repo_root, pane_id)?;
+    runtime.update_zellij_binding(session_uuid, session_id, &tab_id, pane_id)?;
+    Ok((session_id.to_string(), tab_id, pane_id.to_string()))
+}
+
+fn resolve_current_tab_binding(
+    shell: &dyn Shell,
+    repo_root: &Path,
+    pane_id: &str,
+) -> Result<(String, Option<String>, Option<String>)> {
     let mut last_current_tab_output = None;
     let mut last_list_panes_output = None;
 
-    for attempt in 0..BINDING_CAPTURE_ATTEMPTS {
+    for _attempt in 1..=20 {
         let current_tab_output = shell
             .run(
                 repo_root,
                 "zellij",
                 &["action", "current-tab-info", "--json"],
             )
-            .ok();
+            .ok()
+            .filter(|output| !output.trim().is_empty());
         let list_panes_output = shell
             .run(
                 repo_root,
                 "zellij",
-                &["action", "list-panes", "--json", "-t", "-s"],
+                &["action", "list-panes", "--json", "-a", "-c", "-t", "-s"],
             )
-            .ok();
+            .ok()
+            .filter(|output| !output.trim().is_empty());
+
         let tab_id = current_tab_output
             .as_deref()
             .and_then(resolve_tab_id)
@@ -424,18 +437,13 @@ fn capture_current_binding_with_ids(
                     .as_deref()
                     .and_then(|json| resolve_tab_id_from_panes(json, pane_id))
             });
-
         if let Some(tab_id) = tab_id {
-            runtime.update_zellij_binding(session_uuid, session_id, &tab_id, pane_id)?;
-            return Ok((session_id.to_string(), tab_id, pane_id.to_string()));
+            return Ok((tab_id, current_tab_output, list_panes_output));
         }
 
         last_current_tab_output = current_tab_output;
         last_list_panes_output = list_panes_output;
-
-        if attempt + 1 < BINDING_CAPTURE_ATTEMPTS {
-            thread::sleep(BINDING_CAPTURE_RETRY_DELAY);
-        }
+        thread::sleep(BINDING_CAPTURE_RETRY_DELAY);
     }
 
     Err(anyhow!(
@@ -463,12 +471,12 @@ fn find_object_for_pane<'a>(value: &'a Value, pane_id: &str) -> Option<&'a Value
             if map
                 .get("id")
                 .and_then(value_to_string)
-                .map(|value| value == pane_id)
+                .map(|value| pane_id_matches(&value, pane_id))
                 .unwrap_or(false)
                 || map
                     .get("pane_id")
                     .and_then(value_to_string)
-                    .map(|value| value == pane_id)
+                    .map(|value| pane_id_matches(&value, pane_id))
                     .unwrap_or(false)
             {
                 return Some(value);
@@ -481,6 +489,14 @@ fn find_object_for_pane<'a>(value: &'a Value, pane_id: &str) -> Option<&'a Value
             .find_map(|child| find_object_for_pane(child, pane_id)),
         _ => None,
     }
+}
+
+fn pane_id_matches(candidate: &str, pane_id: &str) -> bool {
+    candidate == pane_id || strip_terminal_prefix(candidate) == strip_terminal_prefix(pane_id)
+}
+
+fn strip_terminal_prefix(value: &str) -> &str {
+    value.strip_prefix("terminal_").unwrap_or(value)
 }
 
 fn collect_pane_cwds(value: &Value, pane_cwds: &mut BTreeSet<String>) {
@@ -599,8 +615,9 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        ZellijLauncher, capture_current_binding_with_ids, render_analysis_tab_layout,
-        resolve_tab_id, resolve_tab_id_from_panes,
+        ZellijLauncher, capture_current_binding_with_ids, pane_id_matches,
+        render_analysis_tab_layout, resolve_current_tab_binding, resolve_tab_id,
+        resolve_tab_id_from_panes,
     };
     use crate::config::ZellijConfig;
     use crate::domain::FlowStage;
@@ -755,6 +772,50 @@ mod tests {
             resolve_tab_id_from_panes(json, "terminal_4").as_deref(),
             Some("9")
         );
+    }
+
+    #[test]
+    fn resolves_tab_id_from_panes_when_pane_id_uses_different_terminal_prefix_format() {
+        let json = r#"[
+  {"id":"terminal_4","tab_id":9,"focused":true},
+  {"id":"terminal_5","tab_id":11,"focused":false}
+]"#;
+        assert_eq!(resolve_tab_id_from_panes(json, "4").as_deref(), Some("9"));
+    }
+
+    #[test]
+    fn pane_id_matching_accepts_terminal_prefix_variants() {
+        assert!(pane_id_matches("terminal_7", "7"));
+        assert!(pane_id_matches("7", "terminal_7"));
+        assert!(pane_id_matches("terminal_7", "terminal_7"));
+        assert!(!pane_id_matches("terminal_7", "terminal_8"));
+    }
+
+    #[test]
+    fn resolve_current_tab_binding_retries_until_zellij_exposes_current_tab_metadata() {
+        let temp = tempdir().expect("temp dir");
+        let repo_root = temp.path().join("repo");
+        std::fs::create_dir_all(&repo_root).expect("repo root");
+
+        let shell = FakeShell::default()
+            .with_response_sequence(
+                &format!(
+                    "cwd={}::zellij action current-tab-info --json",
+                    repo_root.display()
+                ),
+                &["", r#"{"name":"issue-analysis","tab_id":7}"#],
+            )
+            .with_response_sequence(
+                &format!(
+                    "cwd={}::zellij action list-panes --json -a -c -t -s",
+                    repo_root.display()
+                ),
+                &["", ""],
+            );
+
+        let (tab_id, _, _) =
+            resolve_current_tab_binding(&shell, &repo_root, "terminal_1").expect("binding");
+        assert_eq!(tab_id, "7");
     }
 
     #[test]
