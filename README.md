@@ -59,6 +59,8 @@
 Базовые документы:
 
 - `README.md` как repo-level overview и входная точка
+- [ROADMAP.md](./ROADMAP.md) как repo-level карта backlog, кластеров и
+  зависимостей
 - [docs/code-quality.md](./docs/code-quality.md)
 - [docs/documentation-structure.md](./docs/documentation-structure.md)
 - [docs/documentation-process.md](./docs/documentation-process.md)
