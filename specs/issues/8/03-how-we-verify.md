@@ -3,10 +3,18 @@
 ## Acceptance Criteria
 
 - в проекте есть отдельный release workflow, который запускается по semver tag;
+- в проекте есть один public release entrypoint;
+- в проекте есть простой и явно задокументированный path для bump
+  `major` / `minor` / `patch`;
 - release workflow публикует GitHub Release с бинарными артефактами и
   checksum-файлами;
 - version из `Cargo.toml`, tag `vX.Y.Z`, changelog и release notes обязаны
   совпадать по версии;
+- versioning contract соответствует Semantic Versioning 2.0.0, а правила bump
+  не противоречат ему;
+- Release Notes являются отдельным артефактом, не дублирующим `CHANGELOG.md`;
+- Release Notes генерируются локально до publish и затем попадают в GitHub
+  Release из versioned файла репозитория;
 - install path через `brew` устанавливает опубликованную release-версию, а не
   development snapshot;
 - install path через `curl` устанавливает опубликованную release-версию для
@@ -19,8 +27,11 @@
 ## Ready Criteria
 
 - выбран и задокументирован release tooling approach;
+- зафиксирован единый public release entrypoint;
 - зафиксирован version/tag/changelog contract;
-- зафиксирован минимальный release matrix первой версии;
+- зафиксирован operator-facing bump contract для `major` / `minor` / `patch`;
+- зафиксирован guide по составлению Release Notes и место их хранения;
+- подтвержден выбранный минимальный release matrix первой версии;
 - определен канонический Homebrew tap contract;
 - определен формат `curl` installer path и поддержка latest/explicit version;
 - определено, какие документы и summary-слои меняются вместе с release flow.
@@ -28,9 +39,16 @@
 ## Invariants
 
 - source of truth для publishable version остается `Cargo.toml`;
+- инкремент версии всегда выбирается через явный тип `major` / `minor` /
+  `patch`, а не неявной ручной правкой произвольных мест;
 - publish tag всегда имеет вид `vX.Y.Z` и совпадает с `Cargo.toml`;
+- правила versioning соответствуют Semantic Versioning 2.0.0;
+- один release запускается одним entrypoint, а не несколькими ручными
+  операциями;
 - `brew` и `curl` используют один и тот же published asset contract;
 - changelog является обязательным release input, а не post-factum заметкой;
+- Release Notes хранятся отдельно от changelog и публикуются в GitHub Release
+  из versioned файла;
 - обычный PR CI и release CI остаются разными pipeline;
 - release automation не зависит от host-окружения разработчика;
 - release assets и checksums детерминированы по версии и platform target.
@@ -40,7 +58,14 @@
 ### Unit tests
 
 - проверка парсинга и сравнения версии между `Cargo.toml` и semver tag;
-- проверка извлечения release notes из нужной секции `CHANGELOG.md`;
+- проверка CLI/script contract единого release entrypoint;
+- проверка bump logic для `patch`, `minor` и `major`, если она оформляется в
+  script/tooling;
+- проверка, что invalid SemVer value или несоответствующий bump contract
+  отклоняется до publish;
+- проверка, что локальная генерация Release Notes использует нужную секцию
+  `CHANGELOG.md` как вход;
+- проверка генерации `docs/releases/vX.Y.Z.md` и соответствия guide/template;
 - проверка asset naming и platform mapping для installer path;
 - проверка выбора latest vs explicit version для `curl` installer logic, если
   эта логика реализуется в versioned script/tooling.
@@ -52,7 +77,12 @@
   - tag != `Cargo.toml`;
   - отсутствует changelog-секция;
   - отсутствует checksum;
+- bump path корректно обновляет версию и связанные release metadata для
+  сценариев `patch`, `minor`, `major`;
+- локальный release path создает versioned файл Release Notes до push/tag;
 - generated Homebrew formula ссылается на asset и checksum нужной версии;
+- release workflow читает Release Notes из versioned файла и публикует их в
+  GitHub Release без повторной облачной генерации;
 - `curl` installer smoke path скачивает корректный asset для Linux/macOS test
   target и раскладывает бинарь в ожидаемое место;
 - повторный запуск release job для той же версии не приводит к silent
@@ -68,17 +98,27 @@
 
 ## Happy Path
 
-1. Разработчик обновляет `Cargo.toml` и `CHANGELOG.md`.
-2. Создается semver tag `vX.Y.Z`.
-3. Release workflow валидирует совпадение tag, package version и changelog.
-4. CI собирает matrix бинарей, публикует checksums и создает GitHub Release.
-5. Homebrew formula и `curl` installer начинают указывать на новые assets.
-6. Пользователь устанавливает новую версию через `brew` или `curl`.
+1. Разработчик запускает единый release entrypoint.
+2. Entry point выбирает `patch`, `minor` или `major` bump и получает
+   согласованное обновление version/release metadata.
+3. Entry point создает или обновляет секцию версии в `CHANGELOG.md`.
+4. Локально генерируется `docs/releases/vX.Y.Z.md`.
+5. Создается semver tag `vX.Y.Z`.
+6. Release workflow валидирует совпадение tag, package version, changelog и
+   Release Notes.
+7. CI собирает matrix бинарей, публикует checksums и создает GitHub Release.
+8. GitHub Release использует body из `docs/releases/vX.Y.Z.md`.
+9. Homebrew formula и `curl` installer начинают указывать на новые assets.
+10. Пользователь устанавливает новую версию через `brew` или `curl`.
 
 ## Edge Cases
 
 - tag создан, но `Cargo.toml` не обновлен;
+- выбран `patch` bump, но tooling пытается изменить `minor` или `major`;
+- version string перестает быть валидной по Semantic Versioning 2.0.0;
 - версия есть в `Cargo.toml`, но отсутствует в `CHANGELOG.md`;
+- changelog обновлен, но Release Notes файл не создан;
+- Release Notes просто копируют changelog без user-facing summary и структуры;
 - release workflow уже публиковал часть артефактов и упал на tap update;
 - release существует, но installer path не находит asset для конкретной
   платформы;
@@ -87,6 +127,10 @@
 ## Failure Scenarios
 
 - GitHub Release создан без полного набора assets;
+- operator-facing bump path обновил только `Cargo.toml`, но не синхронизировал
+  changelog/release metadata;
+- локальная генерация Release Notes отработала, но файл не попал в release
+  commit/tag;
 - Homebrew formula обновилась на неверный checksum;
 - `curl` installer скачал asset не той архитектуры;
 - release notes и `CHANGELOG.md` указывают на разные версии;
@@ -97,9 +141,11 @@
 Нужны диагностические сигналы минимум по следующим точкам:
 
 - какая версия публикуется и каким tag она была вызвана;
+- какой тип bump был выбран: `major`, `minor` или `patch`;
+- какой local script/entrypoint сгенерировал Release Notes и где лежит файл;
+- какая changelog section использовалась как вход для генерации Release Notes;
 - какой release matrix реально собран;
 - какие asset names и checksums опубликованы;
-- какой changelog section была использована для release notes;
 - какой URL formula/tap и какой installer endpoint относятся к этой версии;
 - на каком шаге release flow остановился: build, publish, tap update,
   installer validation или changelog gate.
@@ -107,7 +153,11 @@
 ## Verification Checklist
 
 - release workflow отделен от обычного CI и задокументирован;
+- public release entrypoint задокументирован и проверяем;
+- bump contract для `major` / `minor` / `patch` задокументирован и проверяем;
 - version/tag/changelog contract проверяется автоматически;
+- Semantic Versioning 2.0.0 соблюдается и не подменен локальными правилами;
+- Release Notes не путаются с changelog, имеют guide и versioned storage;
 - GitHub Release содержит ожидаемые assets и checksums;
 - `brew` path проверен на актуальную версию и checksum;
 - `curl` path проверен для поддерживаемых платформ;

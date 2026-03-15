@@ -1,4 +1,4 @@
-# Issue 8: релизный flow, установка через `brew`/`curl`, версионирование и changelog
+# Issue 8: release flow, установка через `brew`/`curl`, версионирование и changelog
 
 Статус: draft
 Тип задачи: `feature`
@@ -10,7 +10,7 @@
 ## Issue
 
 - GitHub issue: https://github.com/dapi/ai-teamlead/issues/8
-- Заголовок: `Релизный флоу: CI-релизы, установка через brew/curl, версионирование, changelog`
+- GitHub issue title: `Релизный флоу: CI-релизы, установка через brew/curl, версионирование, changelog`
 
 ## Summary
 
@@ -26,11 +26,16 @@
 
 Issue вводит минимальный публичный release contract для Rust CLI:
 
+- один operator-facing entrypoint релиза;
 - semver-тег `vX.Y.Z` как trigger релиза;
+- простой operator-facing path для инкремента `major` / `minor` / `patch`;
 - один source of truth для версии;
+- полное соответствие Semantic Versioning 2.0.0;
 - GitHub Release с reproducible артефактами и checksum-файлами;
 - install path через `brew` и `curl`, опирающийся на те же release assets;
 - changelog как обязательная часть release-пакета;
+- отдельные Release Notes как самостоятельный артефакт, отличный от
+  `CHANGELOG.md`;
 - release automation в CI без ручной сборки бинарей.
 
 ## Status
@@ -62,6 +67,5 @@ Analysis-пакет подготовлен и готов к human review.
 
 Блокирующих вопросов по текущему scope не выявлено.
 
-Конкретное имя Homebrew tap-репозитория и финальный release matrix нужно
-зафиксировать в implementation ADR и CI-конфигурации, но это не меняет базовый
-контракт задачи.
+Конкретное имя Homebrew tap-репозитория нужно зафиксировать в implementation
+ADR и CI-конфигурации, но это не меняет базовый контракт задачи.

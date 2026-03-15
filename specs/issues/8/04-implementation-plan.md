@@ -15,7 +15,10 @@ pipeline, а не как набор разрозненных правок.
 
 В план входит:
 
+- единый public release entrypoint;
 - version/tag/changelog contract;
+- простой operator-facing bump path для `major` / `minor` / `patch`;
+- локальная генерация отдельных Release Notes;
 - release workflow в GitHub Actions;
 - GitHub Release assets и checksums;
 - install path через `brew` и `curl`;
@@ -54,6 +57,7 @@ pipeline, а не как набор разрозненных правок.
 
 - Канонические документы, которые нужно обновить:
   - новый ADR по release/distribution contract;
+  - guide по Release Notes и, возможно, template для них;
   - feature- или SSOT-слой release flow, если в реализации появится устойчивый
     repo-level contract шире одной issue;
   - `README.md` как summary уровня репозитория, если release path становится
@@ -72,6 +76,10 @@ pipeline, а не как набор разрозненных правок.
 - текущий development CI уже стабилен и не должен смешиваться с publish path;
 - выбранный release tool должен уметь генерировать или поддерживать тот же
   asset contract для GitHub Release, Homebrew и shell installer;
+- выбранный release/bump tool должен поддерживать полный SemVer 2.0.0 contract
+  и не вводить собственную упрощенную трактовку `major` / `minor` / `patch`;
+- локальный release path должен уметь генерировать Release Notes без
+  обязательной зависимости на внешний облачный LLM;
 - нужен доступ к Homebrew tap update path и способ аутентификации для него;
 - первая publishable версия должна быть явно выбрана до запуска реального
   release workflow.
@@ -94,11 +102,14 @@ pipeline, а не как набор разрозненных правок.
 
 - создан новый ADR по release/distribution contract;
 - зафиксированы:
+  - единый public release entrypoint;
   - semver tag contract;
+  - operator-facing bump contract для `major` / `minor` / `patch`;
   - source of truth для версии;
   - changelog gate;
+  - guide и storage contract для Release Notes;
   - стратегия `brew` и `curl`;
-  - минимальный release matrix.
+  - выбранный минимальный release matrix первой версии.
 
 Проверка:
 
@@ -119,15 +130,21 @@ pipeline, а не как набор разрозненных правок.
 Результат этапа:
 
 - добавлен `CHANGELOG.md`;
+- добавлен или выбран единый bump entrypoint для `major` / `minor` / `patch`;
+- добавлен guide по Release Notes;
+- release entrypoint генерирует `docs/releases/vX.Y.Z.md` локально до tag/push;
 - tooling валидирует совпадение:
   - `Cargo.toml version`;
   - `vX.Y.Z` tag;
   - changelog section;
+  - `docs/releases/vX.Y.Z.md` как publish body для GitHub Release;
 - ошибка на mismatch проявляется до publish step.
 
 Проверка:
 
 - unit/integration тесты на mismatch version и отсутствие changelog section;
+- тесты на корректный bump `patch`, `minor`, `major` и соблюдение SemVer 2.0.0;
+- тесты на генерацию, хранение и публикацию Release Notes;
 - dry-run release path не проходит при нарушении контракта.
 
 ### Этап 3. Реализовать release workflow и publish assets
@@ -205,8 +222,14 @@ pipeline, а не как набор разрозненных правок.
 ## Критерий завершения
 
 - release flow документирован, реализован и проходит dry-run/smoke проверки;
+- весь релиз запускается одним public entrypoint;
+- bump `major` / `minor` / `patch` выполняется одним понятным entrypoint и не
+  требует ручной синхронизации version metadata;
 - `Cargo.toml`, semver tag, changelog и GitHub Release связаны единым
   контрактом;
+- Semantic Versioning 2.0.0 соблюдается полностью;
+- Release Notes локально генерируются, сохраняются в repo и попадают в GitHub
+  Release как отдельный от changelog артефакт;
 - `brew` и `curl` ставят опубликованный бинарь, а не development snapshot;
 - release automation не требует ручной сборки артефактов;
 - минимальная release/install документация синхронизирована с реальным

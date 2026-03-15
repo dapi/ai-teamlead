@@ -31,8 +31,16 @@
 
 Нужен минимальный публичный release contract, в котором:
 
+- у владельца есть одна понятная точка входа для запуска релиза;
 - каждая публикуемая версия оформляется как semver release `vX.Y.Z`;
+- существует простой и понятный способ поднять следующую
+  `major` / `minor` / `patch` версию без ручного редактирования нескольких
+  несвязанных файлов;
+- versioning contract полностью соответствует Semantic Versioning 2.0.0:
+  https://semver.org/;
 - `Cargo.toml`, Git tag, changelog и GitHub Release не противоречат друг другу;
+- Release Notes существуют как отдельный per-release артефакт и не подменяются
+  `CHANGELOG.md`;
 - CI собирает и публикует бинарные артефакты для поддерживаемых платформ;
 - install path через `brew` и `curl` использует те же опубликованные артефакты;
 - release не требует ручной сборки, ручного пересчета checksums и ручного
@@ -43,8 +51,13 @@
 
 В текущую задачу входит:
 
+- единый operator-facing entrypoint релиза;
 - tag-driven release flow в GitHub Actions;
 - канонический versioning contract для `ai-teamlead`;
+- operator-facing механизм bump версии по типу изменения:
+  `major`, `minor`, `patch`;
+- contract для отдельных Release Notes;
+- локальная генерация Release Notes скриптами без требования внешнего LLM;
 - публикация GitHub Release с бинарями и checksum-артефактами;
 - install path через `brew`;
 - install path через `curl`;
@@ -70,6 +83,20 @@
 - `ai-teamlead` остается Rust CLI, поэтому source of truth для продуктовой
   версии должен быть привязан к Rust package metadata, а не к отдельному
   произвольному файлу;
+- оператор должен запускать release через один public entrypoint, а не через
+  набор неявных команд `git`, `gh`, редактора и ручных upload-действий;
+- правило bump версии должно быть понятным человеку и достаточно формальным для
+  автоматизации в CI и release tooling;
+- contract версии должен соблюдать Semantic Versioning 2.0.0 полностью, а не
+  использовать `major` / `minor` / `patch` только как нестрогие ярлыки;
+- `CHANGELOG.md` и Release Notes должны быть разными сущностями:
+  changelog хранит кумулятивную историю версий, а Release Notes описывают
+  конкретный релиз в user-facing форме;
+- Release Notes должны уметь генерироваться локально скриптами; использование
+  локального LLM допустимо только как внутренний помощник этого локального шага;
+- до публикации Release Notes должны сохраняться как versioned файл в
+  репозитории, чтобы CI публиковал в GitHub Release уже проверенный текст, а не
+  генерировал его заново в облаке.
 - release flow должен запускаться в CI и быть воспроизводимым без ручной сборки
   на машине владельца;
 - install paths через `brew` и `curl` должны потреблять один и тот же
@@ -85,20 +112,29 @@
 ## User Story
 
 Как владелец `ai-teamlead`, я хочу выпускать версию по явному semver tag, чтобы
-CI сам собрал бинарные артефакты, опубликовал GitHub Release, обновил install
-каналы через `brew` и `curl` и связал это с changelog, не оставляя ручных
-шагов, которые легко забыть или сделать по-разному.
+я запускал один понятный entrypoint релиза, который сам поднимет нужную
+`major` / `minor` / `patch` версию, обновит changelog, локально подготовит
+отдельные Release Notes, запустит проверки и доведет публикацию до GitHub
+Releases, чтобы на выходе я получал проверенную собранную версию с правильными
+assets, changelog и Release Notes без ручной координации нескольких шагов.
 
 ## Use Cases
 
-1. Разработчик поднимает version в `Cargo.toml`, обновляет `CHANGELOG.md`,
-   создает tag `vX.Y.Z` и получает опубликованный GitHub Release с артефактами
-   и checksums.
+1. Разработчик запускает единый release entrypoint, выбирает `major`, `minor`
+   или `patch` и получает согласованное обновление `Cargo.toml`,
+   `CHANGELOG.md`, Release Notes, tag `vX.Y.Z` и дальнейшую публикацию в
+   GitHub Release с артефактами и checksums.
 2. Пользователь на macOS или Linux выполняет install через `curl` и получает
    бинарь именно той версии, которая опубликована в GitHub Release.
 3. Пользователь выполняет `brew install ...` и получает ту же версию по
    стабильному formula/tap contract.
-4. Поддерживающий релиз проверяет changelog и release notes по конкретной
+4. Сопровождающий выбирает `patch`, `minor` или `major` bump по характеру
+   изменений и получает предсказуемое обновление version/changelog/release
+   metadata без ручной синхронизации нескольких мест.
+5. Сопровождающий запускает один release entrypoint, а дальше flow сам
+   выполняет локальную подготовку Release Notes, проверки, tag/push и CI
+   publish path.
+6. Поддерживающий релиз проверяет changelog и release notes по конкретной
    версии без ручного сравнения между tag, binary assets и историей коммитов.
 
 ## Dependencies
