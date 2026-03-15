@@ -18,6 +18,7 @@ permission gates и verification появились в runtime как согла
 - сохранение `standard` baseline для private repos без undocumented regression;
 - intake policy для auto-start в public repos;
 - approval contract и runtime audit trail;
+- launcher-level secret filtering для `repo/worktree` filesystem view;
 - permission gates для filesystem, network, execution и publication actions;
 - выравнивание launcher, prompts, diagnostics и verification вокруг
   `public-safe` режима.
@@ -56,16 +57,17 @@ permission gates и verification появились в runtime как согла
 ## План изменений документации
 
 - Канонические документы, которые нужно обновить:
-  - `docs/untrusted-input-security.md`, если implementation уточнит security
-    config surface, enforcement boundaries или diagnostics contract;
+  - `docs/untrusted-input-security.md`, если implementation уточнит enforcement
+    boundaries, diagnostics contract или runtime semantics относительно текущего
+    SSOT;
   - `docs/features/0006-public-repo-security/*`, если уточнятся rollout,
     affected areas или verification;
   - новый ADR нужен только при появлении отдельной стабильной config schema или
     нового trusted mechanism.
 - Summary-документы и шаблоны, которые нужно синхронизировать:
   - `README.md`, если public-repo support получит более точный статус;
-  - `docs/config.md` и `templates/init/settings.yml`, если появятся versioned
-    security settings;
+  - `docs/config.md` и `templates/init/settings.yml`, если runtime change set
+    этой issue вводит versioned security settings;
   - project-local prompts и launcher assets, если runtime contract изменит
     operator-visible guidance.
 - Документы, которые сознательно не меняются, и почему:
@@ -78,6 +80,8 @@ permission gates и verification появились в runtime как согла
   implementation;
 - runtime сегодня не содержит полного enforcement baseline для hostile-input
   paths;
+- runtime gate без launcher filtering не даст hard deny для уже видимых
+  `secret-class` files;
 - current launcher defaults и repo-level config docs еще не выровнены с
   целевым approval contract этой feature;
 - self-hosted/dogfooding path требует явного trust-priority rule между local
@@ -109,6 +113,7 @@ permission gates и verification появились в runtime как согла
 - `public` и `unknown` visibility приводят к `public-safe`;
 - `private` visibility по умолчанию оставляет `standard`, если config не
   требует `force-public-safe`;
+- определен минимальный `secret-class` contract для repo/worktree и host paths;
 - зафиксированы правила `poll` vs explicit `run`, включая `manual-override`;
 - зафиксированы owner resolution, missing metadata behavior и self-hosted trust
   priority rule;
@@ -122,7 +127,33 @@ permission gates и verification появились в runtime как согла
 - unit tests на intake decision;
 - integration checks для `public`, `private` и `unknown` cases.
 
-### Этап 2. Ввести approval contract и policy-матрицу risky actions
+### Этап 2. Ввести launcher-level secret filtering и path classification
+
+Цель:
+
+- сделать hard deny для `secret-class` enforce-able до запуска risky actions.
+
+Основание:
+
+- [02-how-we-build.md](./02-how-we-build.md)
+- [03-how-we-verify.md](./03-how-we-verify.md)
+- [../../../docs/untrusted-input-security.md](../../../docs/untrusted-input-security.md)
+
+Результат этапа:
+
+- launcher формирует agent-visible filesystem view для `repo/worktree`;
+- `secret-class` paths (`.env*`, key/cert files и host credential dirs) не
+  попадают в обычный research/edit path;
+- path classification различает ordinary repo files, repo secrets и external
+  host paths;
+- verification доказывает, что normal repo docs/code остаются доступны.
+
+Проверка:
+
+- unit tests для path classification и secret globs;
+- integration tests на launcher filtering и repo-local secret deny.
+
+### Этап 3. Ввести approval contract и policy-матрицу risky actions
 
 Цель:
 
@@ -132,7 +163,7 @@ permission gates и verification появились в runtime как согла
 
 - [02-how-we-build.md](./02-how-we-build.md)
 - [03-how-we-verify.md](./03-how-we-verify.md)
-- [../../../docs/untrusted-input-security.md](../../../docs/untrusted-input-security.md)
+- [../../../docs/code-quality.md](../../../docs/code-quality.md)
 
 Результат этапа:
 
@@ -149,7 +180,7 @@ permission gates и verification появились в runtime как согла
 - unit tests для approval source validation и policy matrix;
 - integration tests на deny/approval behavior по всем gate-категориям.
 
-### Этап 3. Внедрить intake policy, permission gates и publication boundaries
+### Этап 4. Внедрить intake policy, permission gates и publication boundaries
 
 Цель:
 
@@ -179,7 +210,7 @@ permission gates и verification появились в runtime как согла
 - integration tests на deny/approval paths;
 - hostile-input scenarios для data exfiltration и execution abuse.
 
-### Этап 4. Синхронизировать prompts, launcher defaults, config и verification
+### Этап 5. Синхронизировать prompts, launcher defaults, config и verification
 
 Цель:
 
@@ -219,6 +250,8 @@ permission gates и verification появились в runtime как согла
 - auto-intake для public repos не стартует hostile issue вне выбранной policy;
 - explicit `run` вне intake policy работает только как `manual-override` без
   trust upgrade;
+- ordinary repo/worktree files остаются доступны агенту для research/edit path,
+  а `secret-class` paths получают enforce-able deny;
 - approval в MVP приходит только из agent session и логируется в audit trail;
 - approval lifecycle и self-hosted trust priority не оставляют неоднозначности
   для restart/re-run и dogfooding path;

@@ -13,9 +13,9 @@ contract, а не как новую перепридуманную модель.
 1. SSOT [../../../docs/untrusted-input-security.md](../../../docs/untrusted-input-security.md)
    и ADR `0029/0030`;
 2. этот issue-level handoff, который конкретизирует operational details для
-   implementation;
+   implementation, но не подменяет SSOT/ADR;
 3. feature `0006` как summary-layer, который должен быть синхронизирован после
-   реализации, но не переопределяет более точный issue-level contract молча.
+   реализации, но не переопределяет более точный канонический contract молча.
 
 Технический подход:
 
@@ -23,6 +23,9 @@ contract, а не как новую перепридуманную модель.
   `0029/0030` как канонический источник требований;
 - добавить в runtime детерминированное вычисление `repo_visibility` и
   `operating_mode` до входа в execution path;
+- отделить coarse filesystem enforcement от typed runtime policy:
+  launcher/sandbox слой отвечает за secret filtering, runtime `ai-teamlead`
+  gates отвечают за `allow`/`approval`/`deny` по типу действия;
 - внедрить intake layer для public repos, который различает `poll`-auto-intake
   и explicit `run`, но не повышает trust comments;
 - маркировать действия по типу риска и направлять high-risk actions в явные
@@ -39,14 +42,16 @@ contract, а не как новую перепридуманную модель.
   stage-aware `run`/`poll` orchestration, decision points для intake, mode
   resolution и отказов policy;
 - `src/config.rs`:
-  config surface для security policy, allowlist, approval channel и
-  `public-safe` override;
+  config surface для security policy, allowlist, approval channel,
+  `public-safe` override и `secret-class` path policy;
+- `src/security.rs` или эквивалентный policy-layer:
+  classifier для typed actions, path classes, decisions и approval requests;
 - `src/shell.rs`:
   execution gate для опасных команд и diagnostics по отказам;
 - `src/complete_stage.rs` и publication path:
   защита от публикации локальных чувствительных данных;
 - `.ai-teamlead/launch-agent.sh` и staged prompts:
-  выравнивание operator messaging, approval path и различение
+  выравнивание operator messaging, approval path, secret filtering и различение
   `operator intent` против hostile content;
 - `docs/untrusted-input-security.md`, feature `0006`, ADR `0029/0030`:
   возможная синхронизация, если implementation уточнит config/runtime детали;
@@ -63,6 +68,9 @@ contract, а не как новую перепридуманную модель.
 - `intake_decision`: `eligible`, `manual-override`, `skipped`, `denied`;
 - `input_trust_class`: `trusted-control`, `semi-trusted-repo`, `untrusted`,
   `sensitive-local`;
+- `path_class`: `repo-visible`, `repo-secret`, `host-nonsecret`,
+  `host-secret`, `publish-only-artifact`;
+- `enforcement_layer`: `launcher-sandbox`, `runtime-gate`;
 - `approval_state`: `not-required`, `required`, `granted`, `denied`.
 - `action_kind`: `filesystem-read`, `filesystem-write`, `network-open`,
   `network-download`, `execution-command`, `publication-github`;
@@ -75,10 +83,16 @@ contract, а не как новую перепридуманную модель.
 - `repo_visibility = private` по умолчанию сохраняет `operating_mode =
   standard`, если repo-level config явно не требует `force-public-safe`;
 - `repo_visibility = unknown` не может ослаблять ограничения;
+- `repo/worktree` не считаются автоматически безопасными только потому, что они
+  лежат внутри текущего checkout; `secret-class` paths внутри repo выделяются
+  отдельно;
 - для `operating_mode = public-safe` допустимы только `owner-only` и
   `allowlist`; `open-intake` разрешен только для `standard` режима;
 - `operating_mode = standard` сохраняет существующий private-repo baseline и не
   вводит новые public-only intake restrictions без явного config override;
+- launcher/sandbox слой обязан давать агенту доступ ко всему `repo/worktree`,
+  кроме `secret-class` paths, чтобы research и document/code editing path не
+  требовали лишних approval;
 - `poll` работает только с `intake_decision = eligible`;
 - explicit `run` по issue вне intake policy приводит к
   `intake_decision = manual-override`, но не повышает trust-класс issue
@@ -97,6 +111,14 @@ contract, а не как новую перепридуманную модель.
 - `approval_record` должен записываться в runtime audit trail и быть привязан к
   конкретному risky action, session и моменту времени.
 
+`secret-class` для MVP должна включать как минимум:
+
+- `.env`, `.env.*`, кроме явно санитизированных `.env.example`/`.env.sample`;
+- `*.pem`, `*.key`, `*.p12`, `*.jks`;
+- `.git-credentials`, `.npmrc`, `.pypirc`, `.netrc`;
+- host secrets вроде `~/.ssh/*`, `~/.aws/*`, `~/.config/gcloud/*`,
+  `~/.kube/*`, `/proc/self/environ`.
+
 ## Standard Mode Baseline
 
 `repo_visibility = private` и `operating_mode = standard` остаются частью scope
@@ -109,6 +131,8 @@ private-repo path.
   repos, если repo-level config не включает `force-public-safe`;
 - public-only intake restrictions (`owner-only`/`allowlist` как mandatory
   baseline) не навязываются private path молча;
+- агент сохраняет автономный research path внутри `repo/worktree`, кроме
+  `secret-class` paths и explicit deny-категорий;
 - existing generic safety invariants остаются в силе и в `standard`: hostile
   task input не становится approval source, а sensitive local data не считается
   safe для публикации по умолчанию;
@@ -126,8 +150,41 @@ private-repo path.
 - publication path, который должен учитывать риск data exfiltration;
 - trusted operator channel в MVP, через который runtime получает explicit
   approval для конкретного high-risk action;
+- launcher/sandbox слой, который должен формировать agent-visible filesystem
+  view и скрывать `secret-class` paths до того, как модель попытается их читать;
 - project-local prompts и launcher context, которые не должны трактовать
   hostile content как trusted instruction.
+
+## Enforcement Layers
+
+Security enforcement должен быть двухслойным.
+
+Слой 1. `launcher-sandbox`
+
+- формирует доступный агенту filesystem view;
+- разрешает чтение/редактирование обычных файлов внутри `repo/worktree`;
+- скрывает или иным образом hard-deny делает `secret-class` paths, даже если
+  они лежат внутри repo;
+- не полагается на то, что runtime gate сможет "поймать" уже состоявшееся
+  чтение секрета.
+
+Слой 2. `runtime-gate`
+
+- классифицирует действия как `filesystem`, `network`, `execution`,
+  `publication`;
+- для каждого действия выносит typed decision `allow` / `approval` / `deny`;
+- пишет diagnostics и audit trail;
+- не заменяет launcher filtering, а работает поверх него.
+
+Практический контракт:
+
+- внутри `repo/worktree` обычные documents/code files проходят по `allow`,
+  чтобы не ломать автономию research path;
+- `secret-class` paths получают hard `deny`;
+- чтение non-secret path вне `repo/worktree` допускается только через explicit
+  approval;
+- network/publication outside canonical GitHub workflow не становятся implicit
+  allow только потому, что агенту нужен "research".
 
 ## Bootstrap Order And Trust Boundaries
 
@@ -220,7 +277,7 @@ private-repo path.
 
 | Категория | Allow | Approval | Deny |
 | --- | --- | --- | --- |
-| `filesystem` | чтение и запись внутри repo/worktree и разрешенного runtime-dir | разовое чтение явно указанного оператором несекретного пути вне repo/worktree | чтение `~/.ssh`, `~/.aws`, `~/.config`, `/proc/self/environ`, `.env` вне repo; любая запись вне repo/worktree/runtime-dir |
+| `filesystem` | чтение и запись внутри repo/worktree и разрешенного runtime-dir, если path не относится к `secret-class` | разовое чтение явно указанного оператором несекретного пути вне repo/worktree | любой `secret-class` path, включая `.env*`, key/cert files, host credential dirs; любая запись вне repo/worktree/runtime-dir |
 | `network` | канонический GitHub control plane, нужный для работы `ai-teamlead`, включая metadata и canonical workflow endpoints текущего GitHub repo | открытие внешней ссылки или скачивание контента с operator-approved allowlisted host либо явное чтение linked artifact content, если это не требует публикации локальных данных наружу | доступ к non-allowlisted host; отправка локальных файлов/секретов наружу |
 | `execution` | inspect/build/test/edit команды, ограниченные repo/worktree и штатным toolchain | точечный запуск operator-approved команды вне baseline toolchain, если она все еще ограничена approved scope | `sudo`, системные package managers, sandbox escalation, destructive host-level commands, redirection вне repo/worktree |
 | `publication` | публикация versioned artifacts и workflow metadata в канонический GitHub path после secret-scrub | публикация reviewable non-secret artifact в заранее определенный canonical GitHub sink, если auto-path был остановлен explicit gate-ом | публикация secret data, raw credentials, локальных config dumps, сырых runtime artifacts с чувствительным содержимым, любые внешние publish sinks и uploads во внешние сервисы |
@@ -314,9 +371,9 @@ Source of truth и storage:
 
 ## Configuration And Runtime Assumptions
 
-- текущий `settings.yml` пока не содержит полной security schema, но issue
-  фиксирует минимальный draft contract, который implementation должен
-  использовать как source of truth;
+- текущий `settings.yml` пока не содержит полной security schema, поэтому issue
+  фиксирует минимальный proposed contract для implementation handoff до
+  синхронизации канонических config docs;
 - отсутствие security-поля не должно ослаблять policy; для `public` и
   `unknown` visibility runtime обязан применять встроенный fail-closed baseline
   (`public-safe`, `owner-only`, пустой allowlist, `agent-session`,
@@ -334,6 +391,12 @@ Source of truth и storage:
   - `security.network.allow_hosts`: список host allowlist
   - `security.approval.channel`: `agent-session`
   - `security.approval.audit_log`: `true`
+  - `security.filesystem.secret_globs`: список repo/worktree secret-class paths
+  - `security.filesystem.allow_example_env`: `true` для
+    `.env.example`/`.env.sample`
+- если implementation этой issue вводит эти versioned settings в runtime, тот же
+  change set обязан синхронно обновить `docs/config.md` и соответствующие
+  versioned templates; до такой синхронизации schema не считается канонической;
 - enforcement нельзя сводить только к системному prompt или дисциплине модели;
 - текущие launcher defaults, документированные вне этой issue, являются
   pre-security-baseline состоянием и должны быть приведены в соответствие с
@@ -356,6 +419,8 @@ Source of truth и storage:
   нестабильному контракту;
 - частичный enforcement только в prompt-layer создаст ложное ощущение
   защищенности;
+- runtime-only gate без launcher filtering не сможет hard-deny уже видимый
+  модели `secret-class` file;
 - visibility resolution может оказаться неоднозначным для fork-ов,
   временно недоступного GitHub API или деградировавших metadata;
 - publication path легко упустить, хотя именно там возможна утечка локальных
@@ -371,6 +436,8 @@ Source of truth и storage:
   а не после чтения hostile content как будто оно уже trusted;
 - permission gates лучше концентрировать в небольшом числе runtime boundaries,
   а не размазывать по call sites;
+- secret filtering нужно делать до запуска агента; это не должна быть
+  responsibility только prompt-layer или post-factum diagnostics;
 - repo-local docs, `AGENTS.md` и `.ai-teamlead/` assets не должны быть
   неявным способом расширить filesystem или network scope;
 - explicit approval в MVP должен приходить только через agent session и
@@ -418,6 +485,11 @@ ADR `0029` и `0030`.
 
    Отклонено: это разрушает baseline из owner/allowlist intake и противоречит
    fail-closed модели public repos.
+
+5. Положиться только на runtime gates и не фильтровать filesystem view launcher-ом.
+
+   Отклонено: если агент уже видит секретный файл, runtime gate не дает
+   enforce-able hard deny на сам факт чтения.
 
 ## Migration Or Rollout Notes
 

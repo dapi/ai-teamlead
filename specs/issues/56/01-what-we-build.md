@@ -47,9 +47,15 @@ shell layer и publication path.
 - auto-intake для public repos ограничивается отдельной policy, а явный ручной
   `run` рассматривается как отдельный `manual-override` path без trust
   upgrade;
+- агент сохраняет высокую автономию внутри текущего `repo/worktree`: может
+  читать, искать, редактировать документы и код, если path не относится к
+  `secret-class`;
 - explicit approval в MVP может приходить только из agent session и
   привязывается к конкретному risky action через `action_kind` и
   `target_fingerprint`;
+- enforce-able security строится в два слоя: launcher/sandbox обязан скрывать
+  `secret-class` paths из agent-visible filesystem view, а runtime `ai-teamlead`
+  gates обязаны контролировать risky actions по policy;
 - high-risk filesystem, network, execution и publication actions проходят через
   явные permission gates и понятную `allow`/`approval`/`deny` policy;
 - внешние publish sinks в MVP остаются `deny-by-default`, даже если hostile
@@ -69,8 +75,12 @@ shell layer и publication path.
   конкретному действию;
 - зафиксировать `standard` baseline для private repos без тихой регрессии
   существующего workflow;
+- определить двухслойный enforcement contract:
+  `launcher/sandbox` для coarse filesystem boundaries и runtime `ai-teamlead`
+  gates для typed risky actions;
 - определить первые runtime enforcement points в `run`, `poll`, GitHub layer,
   shell execution и publication paths;
+- определить `secret-class` path policy для repo/worktree и host-level secrets;
 - определить минимальный `public-safe` режим для public repos и для случаев,
   когда
   visibility не удалось определить;
@@ -96,6 +106,9 @@ shell layer и publication path.
 - `public` repo и `unknown` visibility должны трактоваться fail-closed;
 - issue body, comments, linked PR/issues, repo files, shell output и generated
   artifacts не являются trusted control plane;
+- hard deny для secret-class paths должен быть enforce-able технически, а не
+  только policy-текстом; runtime gate без launcher filtering недостаточен,
+  если процесс агента уже видит секретный файл;
 - trusted control plane для этой feature в MVP ограничен локальным contract
   layer самого `ai-teamlead` и явными ответами оператора в agent session;
 - для `private` repos default path остается `standard`; эта issue не должна
@@ -173,6 +186,12 @@ network или execution privileges, чтобы issue/comments/repo content ос
 11. Оператор запускает workflow для private repo. Ожидаемое поведение:
    runtime остается в `standard`, сохраняет существующий non-public baseline и
    не вводит public-safe ограничения без явного repo-level override.
+12. Агенту нужно исследовать кодовую базу и документацию внутри `repo/worktree`.
+    Ожидаемое поведение: чтение и редактирование обычных repo files разрешено
+    без лишних approval, чтобы не убить автономию research/documentation path.
+13. Внутри repo лежит `.env.local` или `secrets/dev.pem`. Ожидаемое поведение:
+    launcher не показывает эти paths агенту как обычную рабочую область, а
+    runtime diagnostics объясняют hard deny без раскрытия содержимого.
 
 ## Dependencies
 
