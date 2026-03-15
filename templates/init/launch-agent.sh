@@ -153,13 +153,36 @@ run_project_init() {
 
 start_agent() {
     local prompt
+    local issue_body_section=""
+    if [[ "$AI_TEAMLEAD_DEBUG" == "1" || ${#ISSUE_BODY} -le 300 ]]; then
+        issue_body_section="
+
+Issue Body:
+$ISSUE_BODY"
+    fi
     prompt="$(cat "$FLOW_PATH")
 
 Issue URL: $ISSUE_URL
+Issue Title: $ISSUE_TITLE${issue_body_section}
 Session UUID: $SESSION_UUID
 Flow stage: $FLOW_STAGE
 Stage branch: $BRANCH
 Stage artifacts dir: $ARTIFACTS_DIR"
+
+    local agent_bin="${AI_TEAMLEAD_AGENT_BIN:-}"
+    local agent_kind="${AI_TEAMLEAD_AGENT_KIND:-}"
+    if [[ -n "$agent_bin" && -x "$agent_bin" ]]; then
+        case "$agent_kind" in
+            claude)
+                append_launch_log "starting claude override binary worktree=$WORKTREE_ROOT"
+                exec "$agent_bin" --permission-mode bypassPermissions "$prompt"
+                ;;
+            *)
+                append_launch_log "starting codex override binary worktree=$WORKTREE_ROOT"
+                exec "$agent_bin" --cd "$WORKTREE_ROOT" --no-alt-screen "$prompt"
+                ;;
+        esac
+    fi
 
     if command -v codex >/dev/null 2>&1; then
         append_launch_log "starting codex agent args_count=${#CODEX_GLOBAL_ARGS[@]} worktree=$WORKTREE_ROOT"

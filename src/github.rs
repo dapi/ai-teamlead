@@ -175,6 +175,38 @@ impl<'a> GhProjectClient<'a> {
         parse_json_prefix(&stdout).context("failed to parse pull request list response")
     }
 
+    pub fn load_issue_details(
+        &self,
+        cwd: &Path,
+        owner: &str,
+        repo: &str,
+        issue_number: u64,
+    ) -> Result<IssueDetails> {
+        let stdout = self.shell.run(
+            cwd,
+            "gh",
+            &[
+                "issue",
+                "view",
+                &issue_number.to_string(),
+                "--repo",
+                &format!("{owner}/{repo}"),
+                "--json",
+                "number,title,body,url",
+            ],
+        )?;
+
+        let response: IssueViewResponse =
+            serde_json::from_str(&stdout).context("failed to parse issue details response")?;
+
+        Ok(IssueDetails {
+            number: response.number,
+            title: response.title,
+            body: response.body,
+            url: response.url,
+        })
+    }
+
     pub fn load_pull_request(&self, cwd: &Path, number: u64) -> Result<PullRequestDetails> {
         let stdout = self.shell.run(
             cwd,
@@ -210,6 +242,14 @@ impl<'a> GhProjectClient<'a> {
             .run(cwd, "gh", &["issue", "close", &issue_number.to_string()])?;
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssueDetails {
+    pub number: u64,
+    pub title: String,
+    pub body: String,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -348,6 +388,14 @@ struct ProjectIssueRepository {
 #[derive(Debug, Deserialize)]
 struct ProjectIssueOwner {
     login: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct IssueViewResponse {
+    number: u64,
+    title: String,
+    body: String,
+    url: String,
 }
 
 #[cfg(test)]
@@ -522,5 +570,28 @@ mod tests {
             .resolve_pull_request_for_head(Path::new("/repo"), "implementation/issue-42")
             .expect_err("ambiguous PR list should fail");
         assert!(error.to_string().contains("multiple pull requests found"));
+    }
+
+    #[test]
+    fn loads_issue_details_from_gh_issue_view() {
+        let shell = FakeShell::default().with_response(
+            "gh issue view 42 --repo dapi/teamlead --json number,title,body,url",
+            r#"{"number":42,"title":"Issue title","body":"Issue body","url":"https://github.com/dapi/teamlead/issues/42"}"#,
+        );
+
+        let client = GhProjectClient::new(&shell);
+        let details = client
+            .load_issue_details(Path::new("."), "dapi", "teamlead", 42)
+            .expect("issue details");
+
+        assert_eq!(
+            details,
+            IssueDetails {
+                number: 42,
+                title: "Issue title".into(),
+                body: "Issue body".into(),
+                url: "https://github.com/dapi/teamlead/issues/42".into(),
+            }
+        );
     }
 }

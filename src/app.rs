@@ -6,7 +6,11 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
 
-use crate::cli::{Cli, Command, InternalCommand};
+use crate::agent_flow::{
+    AgentFlowTestRequest, plan_agent_flow_test, print_plan, print_sandbox_result,
+    run_agent_flow_test,
+};
+use crate::cli::{Cli, Command, InternalCommand, TestAgentFlowArgs, TestCommand};
 use crate::complete_stage::{
     canonical_pr_is_merged, finalize_merged_implementation, run_complete_stage,
 };
@@ -29,6 +33,7 @@ pub fn run() -> Result<()> {
 
     match cli.command {
         Command::Init => run_init(&shell),
+        Command::Test { test } => run_test(&shell, test),
         Command::Poll { zellij_session } => run_poll(&shell, zellij_session.as_deref()),
         Command::Loop { zellij_session } => run_loop(&shell, zellij_session.as_deref()),
         Command::Run {
@@ -38,6 +43,34 @@ pub fn run() -> Result<()> {
         } => run_manual_run(&shell, &issue, debug, zellij_session.as_deref()),
         Command::Internal { internal } => run_internal(&shell, internal),
     }
+}
+
+fn run_test(shell: &dyn Shell, test: TestCommand) -> Result<()> {
+    match test {
+        TestCommand::AgentFlow(args) => run_test_agent_flow(shell, args),
+    }
+}
+
+fn run_test_agent_flow(shell: &dyn Shell, args: TestAgentFlowArgs) -> Result<()> {
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    let repo = RepoContext::discover(shell, &cwd)?;
+    let plan = plan_agent_flow_test(
+        &repo.repo_root,
+        &repo.git_dir,
+        &AgentFlowTestRequest {
+            scenario: args.scenario,
+            agent: args.agent,
+            mode: args.mode,
+            keep_sandbox: args.keep_sandbox,
+            artifacts_dir: args.artifacts_dir,
+            timeout_seconds: args.timeout_seconds,
+            no_build: args.no_build,
+        },
+    )?;
+    print_plan(&plan);
+    let result = run_agent_flow_test(shell, &repo.repo_root, &repo.git_dir, &plan)?;
+    print_sandbox_result(&result);
+    Ok(())
 }
 
 fn run_init(shell: &dyn Shell) -> Result<()> {
@@ -713,6 +746,7 @@ fn run_internal_launch_zellij_fixture(shell: &dyn Shell, issue_number: u64) -> R
 
 fn run_internal_render_launch_agent_context(shell: &dyn Shell, issue_ref: &str) -> Result<()> {
     let context = load_execution_context(shell, None)?;
+    let github = GhProjectClient::new(shell);
     let issue_number = parse_issue_ref(issue_ref)
         .with_context(|| format!("failed to parse issue reference: {issue_ref}"))?;
     let flow_stage = std::env::var("AI_TEAMLEAD_FLOW_STAGE")
@@ -724,12 +758,14 @@ fn run_internal_render_launch_agent_context(shell: &dyn Shell, issue_ref: &str) 
             _ => None,
         })
         .unwrap_or(FlowStage::Analysis);
-    let rendered = render_launch_agent_context(&context, issue_number, flow_stage)?;
+    let rendered = render_launch_agent_context(&context, &github, issue_number, flow_stage)?;
 
     println!(
         "ISSUE_NUMBER={}",
         shell_quote(&rendered.issue_number.to_string())
     );
+    println!("ISSUE_TITLE={}", shell_quote(&rendered.issue_title));
+    println!("ISSUE_BODY={}", shell_quote(&rendered.issue_body));
     println!("REPO={}", shell_quote(&rendered.repo_name));
     println!("FLOW_STAGE={}", shell_quote(rendered.stage.as_str()));
     println!("BRANCH={}", shell_quote(&rendered.branch));
@@ -817,6 +853,8 @@ fn resolve_launch_zellij_config(
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LaunchAgentContext {
     issue_number: u64,
+    issue_title: String,
+    issue_body: String,
     repo_name: String,
     stage: FlowStage,
     branch: String,
@@ -828,12 +866,19 @@ struct LaunchAgentContext {
 
 fn render_launch_agent_context(
     context: &ExecutionContext,
+    github: &GhProjectClient<'_>,
     issue_number: u64,
     stage: FlowStage,
 ) -> Result<LaunchAgentContext> {
     let repo_name = context.repo.github_repo.clone();
     let home = std::env::var("HOME").context("HOME is not set")?;
     let issue_number_str = issue_number.to_string();
+    let issue = github.load_issue_details(
+        &context.repo.repo_root,
+        &context.repo.github_owner,
+        &context.repo.github_repo,
+        issue_number,
+    )?;
 
     let branch_template = match stage {
         FlowStage::Analysis => &context.config.launch_agent.analysis_branch_template,
@@ -887,6 +932,8 @@ fn render_launch_agent_context(
 
     Ok(LaunchAgentContext {
         issue_number,
+        issue_title: issue.title,
+        issue_body: issue.body,
         repo_name,
         stage,
         branch,
@@ -982,11 +1029,59 @@ mod launch_agent_tests {
         RuntimeConfig, ZellijConfig,
     };
     use crate::domain::FlowStage;
+    use crate::github::GhProjectClient;
     use crate::repo::RepoContext;
     use crate::runtime::RuntimeLayout;
+    use crate::shell::Shell;
     use crate::templates::render_template;
+    use anyhow::{Result, anyhow};
+    use std::collections::BTreeMap;
+    use std::path::Path;
     use std::path::PathBuf;
     use tempfile::tempdir;
+
+    #[derive(Default)]
+    struct FakeShell {
+        responses: BTreeMap<String, String>,
+    }
+
+    impl FakeShell {
+        fn with_response(mut self, key: &str, value: &str) -> Self {
+            self.responses.insert(key.to_string(), value.to_string());
+            self
+        }
+    }
+
+    impl Shell for FakeShell {
+        fn run(&self, _cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
+            let key = format!("{program} {}", args.join(" "));
+            self.responses
+                .get(&key)
+                .cloned()
+                .ok_or_else(|| anyhow!("missing fake response for: {key}"))
+        }
+
+        fn run_with_env(
+            &self,
+            cwd: &Path,
+            _envs: &[(&str, &str)],
+            program: &str,
+            args: &[&str],
+        ) -> Result<String> {
+            self.run(cwd, program, args)
+        }
+
+        fn spawn_with_env(
+            &self,
+            cwd: &Path,
+            _envs: &[(&str, &str)],
+            program: &str,
+            args: &[&str],
+            _stdout_stderr_log_path: Option<&Path>,
+        ) -> Result<()> {
+            self.run(cwd, program, args).map(|_| ())
+        }
+    }
 
     #[test]
     fn renders_launch_agent_templates() {
@@ -1006,6 +1101,8 @@ mod launch_agent_tests {
 
         let context = LaunchAgentContext {
             issue_number: 42,
+            issue_title: "Issue title".into(),
+            issue_body: "Issue body".into(),
             repo_name: "teamlead".into(),
             stage: FlowStage::Analysis,
             branch,
@@ -1034,7 +1131,12 @@ mod launch_agent_tests {
         std::fs::create_dir_all(repo_root.join(".git")).expect("git dir");
 
         let context = test_execution_context(repo_root);
-        let rendered = render_launch_agent_context(&context, 42, FlowStage::Analysis)
+        let shell = FakeShell::default().with_response(
+            "gh issue view 42 --repo dapi/example --json number,title,body,url",
+            r#"{"number":42,"title":"Issue title","body":"Issue body","url":"https://github.com/dapi/example/issues/42"}"#,
+        );
+        let github = GhProjectClient::new(&shell);
+        let rendered = render_launch_agent_context(&context, &github, 42, FlowStage::Analysis)
             .expect("render launch context");
 
         assert_eq!(rendered.codex_global_args, vec!["--full-auto".to_string()]);
@@ -1042,6 +1144,8 @@ mod launch_agent_tests {
             rendered.claude_global_args,
             vec!["--permission-mode".to_string(), "auto".to_string()]
         );
+        assert_eq!(rendered.issue_title, "Issue title");
+        assert_eq!(rendered.issue_body, "Issue body");
     }
 
     #[test]
