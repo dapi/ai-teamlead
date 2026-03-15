@@ -86,6 +86,7 @@
 - [docs/features/0004-issue-implementation-flow/README.md](./docs/features/0004-issue-implementation-flow/README.md)
 - [docs/features/0005-agent-flow-integration-testing/README.md](./docs/features/0005-agent-flow-integration-testing/README.md)
 - [docs/features/0006-public-repo-security/README.md](./docs/features/0006-public-repo-security/README.md)
+- [docs/features/0007-default-issue-aware-tab-naming/README.md](./docs/features/0007-default-issue-aware-tab-naming/README.md)
 - [docs/adr/](./docs/adr/) — Architecture Decision Records
 - [AURA.md](./AURA.md) как project-local доступ к
   личному высокоуровневому инженерному видению разработчика
