@@ -33,8 +33,8 @@
 - локальные проверки, commit, push, draft PR и CI оформлены как явный контракт;
 - human review происходит после `Waiting for Code Review`, а не смешивается с
   analysis approval;
-- merge tracked implementation PR переводит issue в `Done` и завершает
-  lifecycle без ручного post-merge разбора.
+- merge implementation PR переводит issue в `Done` и завершает lifecycle без
+  ручного post-merge разбора.
 
 ## Scope
 
@@ -46,7 +46,7 @@
 - stage-scoped runtime/session-binding;
 - implementation launcher contract;
 - finalization contract для commit/push/PR/status transitions;
-- tracked PR metadata и post-merge terminalization;
+- post-merge terminalization с отдельным review по GitHub-first reconcile;
 - verification strategy для локальных тестов, CI и human review.
 
 ## Вне scope
@@ -66,3 +66,13 @@
 - repo-specific naming и launcher behavior должны оставаться configurable;
 - проверки, которые могут задеть host `zellij`, выполняются только в
   headless-friendly среде.
+
+## Follow-up review 2026-03-15
+
+В рамках follow-up review на proposed
+[ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md)
+отдельно пересматривается вопрос:
+
+- нужен ли implementation flow обязательный runtime-tracked PR identity, или
+  reconcile должен полностью восстанавливаться из GitHub Project, PR и git
+  refs.

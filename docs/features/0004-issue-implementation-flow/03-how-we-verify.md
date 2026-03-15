@@ -11,7 +11,8 @@
 - finalization contract корректно переводит issue в
   `Waiting for CI`, `Waiting for Code Review`, `Done`,
   `Implementation In Progress` или `Implementation Blocked`;
-- draft PR и CI checks участвуют в status transitions implementation stage.
+- draft PR и CI checks участвуют в status transitions implementation stage;
+- semantic state issue восстанавливается из GitHub, а не только из runtime.
 
 ## Критерии готовности
 
@@ -30,7 +31,9 @@ Feature считается готовой, если:
 - approved analysis artifacts обязательны для implementation stage;
 - один issue может иметь не более одного активного runtime-binding на stage;
 - implementation branch не совпадает с analysis branch;
-- без локальных проверок issue не должна переходить в `Waiting for CI`.
+- без локальных проверок issue не должна переходить в `Waiting for CI`;
+- runtime не должен быть единственным обязательным источником данных для
+  post-merge reconcile.
 
 ## Сценарии проверки
 
@@ -67,7 +70,7 @@ Feature считается готовой, если:
 ### Сценарий 6. Post-merge reconcile
 
 - issue находится в `Waiting for Code Review`;
-- tracked implementation PR уже merged;
+- implementation PR по canonical branch уже merged;
 - повторный `run <issue>` или `complete-stage --outcome merged` переводит issue
   в `Done` без нового agent launch.
 
@@ -79,6 +82,19 @@ Feature считается готовой, если:
 - какой runtime-binding используется;
 - какой implementation branch/worktree выбран;
 - какой outcome передан в finalization;
-- какой PR связан с issue;
+- какой canonical branch и какой PR связаны с issue;
 - какие checks считаются обязательными для перехода к code review;
 - почему merged reconciliation завершилась в `Done` или не сработала.
+
+## Follow-up review 2026-03-15
+
+Этот verification contract находится на частичном пересмотре в части
+GitHub-first reconcile.
+
+До принятия
+[ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md)
+нужно отдельно подтвердить:
+
+- что отсутствие `tracked PR metadata` не ломает deterministic reconcile;
+- что `last_known_flow_status` остается только cache/diagnostic полем;
+- что canonical branch contract достаточен для однозначного выбора PR.

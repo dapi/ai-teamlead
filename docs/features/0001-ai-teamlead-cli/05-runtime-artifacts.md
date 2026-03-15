@@ -1,6 +1,6 @@
 # Feature 0001: Runtime-артефакты
 
-Статус: draft
+Статус: draft, частично на пересмотре через ADR-0028
 Последнее обновление: 2026-03-14
 
 ## Назначение
@@ -86,8 +86,8 @@
 Важно не смешивать разные словари состояний:
 
 - `session.json.status` это локальный lifecycle session-binding
-- `issues/<issue_number>.json.last_known_flow_status` это последнее локально
-  известное значение flow-статуса из GitHub Project
+- `issues/<issue_number>.json.last_known_flow_status` это локальный cache /
+  diagnostic snapshot последнего наблюдаемого flow-статуса из GitHub Project
 - source of truth по status issue остается в GitHub Project, а не в runtime json
 
 ### `sessions/<session_uuid>/launch-layout.kdl`
@@ -128,6 +128,13 @@
 }
 ```
 
+Примечание:
+
+- `last_known_flow_status` не должен использоваться как обязательная semantic
+  истина для reconcile;
+- эта часть runtime contract вынесена на пересмотр в
+  [ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md).
+
 ## Инварианты
 
 - одна issue в анализе связана ровно с одним `session_uuid`
@@ -137,6 +144,8 @@
 - runtime-артефакты не являются source of truth по статусу issue в GitHub
 - runtime-артефакты являются source of truth для локального session-binding и
   технических метаданных запуска
+- semantic state issue должен восстанавливаться из GitHub даже при потере
+  локального runtime
 
 ## Правила обновления
 
@@ -156,6 +165,8 @@
 - при повторном `run` открывать новую pane в stable `zellij` launch context, а
   не пытаться вернуть пользователя в старую pane
 - не пытаться восстанавливать диалог из отдельных JSON-артефактов
+- не полагаться на `last_known_flow_status` как на единственный критерий выбора
+  следующего действия
 
 ## Диагностическая ценность
 
@@ -218,6 +229,20 @@
   сам `pane-entrypoint.sh`
 
 ### Практическая цепочка запуска
+
+## Follow-up review 2026-03-15
+
+Под пересмотр вынесены две части runtime contract:
+
+- `last_known_flow_status` как semantic field;
+- обязательность runtime metadata для post-merge reconcile.
+
+Proposed направление:
+
+- runtime остается durable storage для session-binding;
+- reconcile восстанавливает semantic state из GitHub Project, PR и git refs;
+- runtime fields, дублирующие GitHub state, остаются только cache/diagnostic
+  слоем.
 
 Для одной issue цепочка выглядит так:
 

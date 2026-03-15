@@ -43,6 +43,7 @@
 - [docs/adr/0025-stage-aware-runtime-bindings.md](../../adr/0025-stage-aware-runtime-bindings.md)
 - [docs/adr/0026-stage-aware-complete-stage.md](../../adr/0026-stage-aware-complete-stage.md)
 - [docs/adr/0027-post-merge-implementation-lifecycle.md](../../adr/0027-post-merge-implementation-lifecycle.md)
+- [docs/adr/0028-github-first-reconcile-and-runtime-cache-only.md](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md)
 
 ## Открытые вопросы
 
@@ -52,9 +53,17 @@
   finalization command или оставаться явным human gate;
 - потребуется ли в будущем отдельный post-merge flow для deploy/release path
   поверх базового terminal status `Done`.
+- должен ли implementation reconcile полностью отказаться от `tracked PR
+  metadata` и `last_known_flow_status` в пользу GitHub-first модели.
 
 ## Журнал изменений
 
 ### 2026-03-14
 
 - создана feature 0004 для `issue-implementation-flow`
+
+### 2026-03-15
+
+- добавлен review-track на proposed
+  [ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md)
+  без изменения кода
