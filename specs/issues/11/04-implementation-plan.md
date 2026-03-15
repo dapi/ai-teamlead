@@ -7,14 +7,16 @@
 
 Этот план задает порядок реализации понятных operator-facing ошибок для
 `ai-teamlead run <issue>` в ситуациях `issue not found`, `issue closed`,
-`issue not in target project` и `status denied`.
+`issue not in target project` и `status denied`, с приоритетом
+`auto-remediation first`.
 
 ## Scope
 
 В scope входит:
 
 - добавить repo-level lookup для одной issue вне `ProjectSnapshot`;
-- ввести структурированную доменную модель отказа для ручного `run`;
+- добавить project mutation path для auto-remediation;
+- ввести структурированную remediation-aware доменную модель для ручного `run`;
 - реализовать канонический formatter user-facing сообщений;
 - обновить `run_manual_run` под новый decision path;
 - добавить unit и integration tests;
@@ -23,10 +25,10 @@
 Вне scope:
 
 - изменение allowed statuses или status transitions;
-- автоматическое изменение project membership из CLI;
 - изменение публичного синтаксиса команды `run`;
 - новый ADR;
-- полная система локализации всего CLI.
+- полная система локализации всего CLI;
+- автоматическое переоткрытие закрытых issue.
 
 ## Связанные документы
 
@@ -51,20 +53,21 @@
 - `gh`-adapter слой остается канонической интеграцией с GitHub;
 - `ProjectSnapshot` сам по себе не покрывает случаи `not found` и `closed`,
   поэтому нужен отдельный lookup-path;
-- configured `project_id` не дает готовый numeric project number для
-  `gh project item-add`, поэтому подсказку нужно проектировать честно:
-  placeholder или явный дополнительный lookup;
+- auto-remediation должен использовать канонический GitHub adapter, а не
+  shell-snippets с ручными командами для пользователя;
+- автоисправление допустимо только при детерминированном выборе target status;
 - качество изменения подтверждается не только unit-тестами formatter-а, но и
   хотя бы одним integration сценарием реального CLI-вывода.
 
 ## Порядок работ
 
-### Этап 1. Repo-level lookup issue
+### Этап 1. Repo-level lookup и mutation prerequisites
 
 Цель:
 
 - добавить в GitHub adapter минимальный lookup одной issue по owner/repo и
-  номеру.
+  номеру;
+- подготовить данные и команды, достаточные для project mutation.
 
 Основание:
 
@@ -73,20 +76,21 @@
 
 Результат этапа:
 
-- adapter умеет возвращать минимум `number`, `state`, `url` или явный
+- adapter умеет возвращать минимум `id`, `number`, `state`, `url` или явный
   `not found`;
 - `run_manual_run` получает данные, которых не было в `ProjectSnapshot`.
 
 Проверка:
 
 - unit-тесты adapter parsing;
-- при необходимости fake-shell тест на `not found` и `closed`.
+- при необходимости fake-shell тест на `not found`, `closed` и project
+  mutation payload.
 
-### Этап 2. Domain-решение и formatter
+### Этап 2. Domain-решение, remediation-plan и formatter
 
 Цель:
 
-- ввести структурированный отказной контракт для ручного `run`.
+- ввести структурированный remediation-aware контракт для ручного `run`.
 
 Основание:
 
@@ -95,17 +99,20 @@
 
 Результат этапа:
 
-- domain-слой различает `IssueNotFound`, `IssueClosed`, `IssueNotInProject`,
-  `StatusDenied`;
+- domain-слой различает `IssueNotFound`, `IssueClosed`, `AttachToProject`,
+  `NormalizeStatus`, `ExplainOnlyStatusDenied`;
 - formatter строит user-facing сообщение из структурированных данных;
-- `allowed_statuses` выводятся из канонической dispatch-логики.
+- `allowed_statuses` выводятся из канонической dispatch-логики;
+- remediation-plan определяет, когда система исправляет проблему сама, а когда
+  эскалирует на пользователя.
 
 Проверка:
 
 - unit-тесты formatter-а и списка допустимых статусов;
+- unit-тесты remediation decision;
 - отдельная регрессия на `Ready for Implementation`.
 
-### Этап 3. Wiring в `run_manual_run`
+### Этап 3. Wiring и auto-remediation в `run_manual_run`
 
 Цель:
 
@@ -120,13 +127,17 @@
 
 - ранний blanket-error `issue is not linked to the project` убран;
 - `run_manual_run` пошагово различает `not found`, `closed`,
-  `not in project`, `status denied`;
+- `not in project`, `status denied`;
+- для `AttachToProject` выполняется автоматическое добавление issue в project и
+  установка стартового status;
+- для `NormalizeStatus` выполняется автоматический перевод issue в корректный
+  status перед повторным dispatch;
 - успешные ветки analysis и implementation работают как раньше.
 
 Проверка:
 
 - unit-тесты decision flow, если выделена отдельная функция;
-- integration test на отказной CLI-path.
+- integration test на auto-remediation path и explain-only path.
 
 ### Этап 4. Verification и регрессии
 
@@ -142,7 +153,7 @@
 Результат этапа:
 
 - `cargo test` проходит;
-- есть integration coverage на новый operator-facing текст;
+- есть integration coverage на новый operator-facing текст и remediation path;
 - старые успешные stage-aware сценарии не ломаются.
 
 Проверка:
@@ -158,12 +169,14 @@ Issue можно считать реализованной, если:
 
 - оператор по сообщению понимает, какая именно из четырех отказных веток
   сработала;
+- там, где система может безопасно исправить проблему сама, она делает это и
+  явно сообщает пользователю о результате;
 - `project_id`, issue URL, current status и allowed statuses выводятся там, где
-  это нужно для ручного исправления;
+  это нужно для explain-only fallback;
 - `Ready for Implementation` и остальные implementation entry statuses не
   ошибочно попадают в deny-path;
 - новый formatter покрыт unit-тестами;
-- есть integration test, подтверждающий реальный CLI-вывод.
+- есть integration test, подтверждающий реальный CLI-вывод и mutation path.
 
 ## Открытые вопросы и риски
 
@@ -173,7 +186,9 @@ Issue можно считать реализованной, если:
 - если adapter выберет неустойчивый внешний CLI-output вместо структурированного
   JSON, тестируемость и надежность ухудшатся;
 - при расширении списка допустимых статусов в будущем formatter должен
-  автоматически наследовать новое множество без ручного редактирования строк.
+  автоматически наследовать новое множество без ручного редактирования строк;
+- auto-remediation нельзя расширять на случаи, где target status не
+  определяется однозначно.
 
 ## Журнал изменений
 
