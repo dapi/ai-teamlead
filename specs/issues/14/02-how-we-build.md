@@ -9,11 +9,16 @@
 2. Расширить GitHub snapshot так, чтобы каждый `ProjectIssueItem` содержал
    список assignee login-ов.
 3. Перед выбором backlog-issue вычислять effective assignee filter:
-   - `None`, если настройка отсутствует;
+   - `"$me"`, если настройка отсутствует;
    - resolved login текущего пользователя, если задано `"$me"`;
+   - отсутствие фильтрации, если задано `"$all"`;
+   - специальный режим unassigned, если задано `"$unassigned"`;
    - literal username, если задано конкретное имя.
 4. Передавать уже resolved filter в domain-функцию выбора backlog-issue.
-5. Сохранить ручной `run` вне влияния нового фильтра.
+5. Добавить в `run` проверку соответствия issue effective filter с warning /
+   approve semantics и `--force` bypass.
+6. Считать issue `#11` обязательным prerequisite для финальной реализации и
+   rollout этой части `run`.
 
 Это сохраняет текущее разделение ответственности:
 
@@ -21,7 +26,8 @@
 - `github` отвечает за получение snapshot и resolve текущего пользователя через
   `gh`;
 - `domain` отвечает за pure selection logic;
-- `app` отвечает за orchestration команд `poll` и `loop`.
+- `app` отвечает за orchestration команд `poll`, `loop` и operator-facing
+  поведение `run` при mismatch.
 
 ## Affected Areas
 
@@ -30,12 +36,13 @@
 - `src/github.rs`
   загрузка assignees из GraphQL snapshot и helper для resolve current user;
 - `src/domain.rs`
-  фильтрация backlog-элементов по resolved assignee;
+  фильтрация backlog-элементов по effective assignee policy;
 - `src/app.rs`
-  вычисление effective filter для `poll` и `loop`, при этом `run` остается без
-  нового ограничения;
+  вычисление effective filter для `poll`, `loop` и `run`, warning/approve path,
+  а также `--force` override;
 - `templates/init/settings.yml`
-  закомментированный documented пример `poll.assignee_filter`;
+  закомментированный documented пример `poll.assignee_filter` с default
+  `"$me"` и override-режимами;
 - unit tests и integration tests для config, selection logic и `poll`.
 
 ## Interfaces And Data
@@ -50,10 +57,12 @@ poll:
 Семантика поля:
 
 - `poll` блок optional;
-- `poll.assignee_filter` optional;
-- если значение не задано, domain selection не получает дополнительный фильтр;
-- `"$me"` является специальным значением и не должно попадать в domain как
-  literal filter;
+- `poll.assignee_filter` optional как active override, но отсутствие active
+  значения не означает отсутствие политики;
+- если значение не задано, effective value считается `"$me"`;
+- `"$me"` резолвится в login текущего GitHub-пользователя;
+- `"$all"` отключает фильтрацию по assignee;
+- `"$unassigned"` выбирает только issue без assignee;
 - любое другое непустое значение трактуется как GitHub login.
 
 Целевое расширение snapshot-модели:
@@ -82,24 +91,35 @@ pub struct ProjectIssueItem {
 Domain contract для выбора backlog-issue:
 
 - фильтрация по repo, issue state и status остается прежней;
-- если resolved filter отсутствует, поведение идентично текущему;
-- если resolved filter задан, eligible считается только issue, у которой
-  `assignees` содержит совпадающий login;
+- при effective mode `"$all"` поведение идентично текущему;
+- при effective mode `"$unassigned"` eligible считается только issue с пустым
+  `assignees`;
+- при login-based mode eligible считается только issue, у которой `assignees`
+  содержит совпадающий login;
 - порядок среди eligible элементов остается прежним: верхняя issue из snapshot
   GitHub Project.
+
+Contract для ручного `run`:
+
+- `run` вычисляет тот же effective assignee policy, что и `poll`;
+- если issue policy не нарушает, запуск идет обычным путем;
+- если issue не соответствует policy, `run` выводит warning;
+- без `--force` после warning нужен явный approve пользователя;
+- с `--force` warning остается, но approve path пропускается.
 
 ## Configuration And Runtime Assumptions
 
 - старые `settings.yml` без блока `poll` должны загружаться без изменений;
-- comment-only template не обязан включать active `poll` block по default,
-  потому что `assignee_filter` не является canonical runtime default;
+- comment-only template должен показывать закомментированный пример с
+  `assignee_filter: "$me"` и рядом допустимые override-режимы;
 - для `poll` команда `"$me"` может резолвиться непосредственно перед
   `run_poll_cycle`;
 - для `loop` resolved login должен вычисляться один раз до входа в цикл и
   затем переиспользоваться во всех итерациях процесса;
 - ошибка `gh api user` должна останавливать запуск `poll` или `loop` на старте,
   а не проявляться поздно после частичного claim;
-- `run` продолжает находить issue по номеру и не читает `poll.assignee_filter`.
+- `run` должен читать effective assignee policy, но его детальная UX-ветка
+  зависит от реализации issue `#11`.
 
 ## Risks
 
@@ -107,8 +127,10 @@ Domain contract для выбора backlog-issue:
   работающим в config, но всегда давать пустую выборку;
 - если `"$me"` будет резолвиться на каждом poll-cycle, `loop` начнет делать
   лишние вызовы `gh` и хуже диагностироваться при flaky auth;
-- если фильтр случайно применить к `run`, это сломает явно зафиксированное
-  требование issue;
+- если `run` и `poll` будут вычислять разные effective modes, контракт станет
+  непредсказуемым для оператора;
+- если `run` mismatch path реализовать до закрытия issue `#11`, можно получить
+  второй несовместимый слой user-facing диагностики;
 - если не обновить test snapshots и gh stubs, integration tests начнут
   проверять старый payload и потеряют ценность;
 - если сравнение login-ов реализовать неявно или непоследовательно, возможны
@@ -130,6 +152,8 @@ Domain contract для выбора backlog-issue:
   stubs;
 - shell-вызов `gh api user` должен идти через существующий `Shell`
   abstraction, а не через ad-hoc `Command::new`.
+- interactive approve path для `run` должен проектироваться вместе с issue
+  `#11`, а не как отдельный локальный prompt-layer внутри `#14`.
 
 ## ADR Impact
 
@@ -140,7 +164,8 @@ Domain contract для выбора backlog-issue:
 - issue не меняет repo-local природу `settings.yml`, а лишь расширяет ее по
   ADR-0001;
 - issue не меняет модель `poll` / `loop` как CLI-команд, а лишь уточняет
-  selection semantics внутри уже существующего контракта из ADR-0021;
+  selection semantics и policy-check в рамках уже существующего CLI-контракта
+  из ADR-0021;
 - детерминированный порядок backlog-выбора из ADR-0009 сохраняется после
   фильтрации;
 - работа с documented template и default-layer остается в рамках ADR-0027.
@@ -162,18 +187,27 @@ Domain contract для выбора backlog-issue:
 
 ### 2. Применять assignee filter и к ручному `run`
 
+Принято после review.
+
+Review уточнил, что `run` тоже должен учитывать policy, но через более мягкий
+contract: warning и approve, а не через немой отказ.
+
+### 3. Считать отсутствие active значения эквивалентом отсутствия фильтра
+
 Отклонено.
 
-Issue явно фиксирует, что `run` не зависит от `assignee_filter`, поэтому новый
-контракт должен оставаться локальным именно для автоматического выбора backlog.
+Review явно уточнил, что default policy должна быть `"$me"`. Полное отключение
+должно быть отдельным явным режимом вроде `"$all"`.
 
 ## Migration Or Rollout Notes
 
 - схема обратно совместима: существующие конфиги без `poll` продолжают
-  работать;
+  работать, но начинают наследовать default policy `"$me"`;
 - rollout требует обновления test fixtures с assignees в GitHub snapshot;
-- documented template должен получить только закомментированный пример, чтобы
-  не навязывать новый opt-in фильтр как активное значение;
-- после внедрения нужно проверить, что `poll` без фильтра по-прежнему берет
-  верхнюю подходящую issue и что `loop` не повторяет resolve current user в
-  каждой итерации.
+- documented template должен получить только закомментированный пример и
+  пояснение про `"$all"` / `"$unassigned"`;
+- до реализации issue `#11` задача должна считаться blocked и не должна
+  переходить к coding stage;
+- после закрытия `#11` нужно проверить, что `poll` с default `"$me"` берет
+  верхнюю подходящую issue текущего пользователя, а `run` корректно проходит
+  через warning/approve semantics.

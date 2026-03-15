@@ -9,25 +9,32 @@
 
 ## Summary
 
-Issue добавляет в repo-local config опциональный фильтр
-`poll.assignee_filter`, который ограничивает выбор backlog-issue для `poll` и
-`loop` задачами, заасайненными на конкретного GitHub-пользователя.
+Issue добавляет в repo-local config настройку `poll.assignee_filter`, которая
+по умолчанию работает как `"$me"` и ограничивает выбор backlog-issue для
+`poll` и `loop` задачами текущего GitHub-пользователя.
 
-Фильтр должен поддерживать три режима:
+Контракт должен поддерживать как минимум четыре режима:
 
-- отсутствие значения: текущее поведение без ограничений;
+- отсутствие значения: effective default `"$me"`;
 - `"$me"`: выбор только issue текущего GitHub-пользователя;
+- `"$all"`: явное отключение фильтра по assignee;
+- `"$unassigned"`: выбор только issue без assignee;
 - `"username"`: выбор issue конкретного пользователя.
 
 Для этого нужно расширить snapshot GitHub Project полем `assignees`,
-добавить runtime-resolve текущего пользователя через `gh api user` и сохранить
-инвариант: ручной `run` по-прежнему работает для любой issue независимо от
-assignee.
+добавить runtime-resolve текущего пользователя через `gh api user` и изменить
+контракт ручного `run`: при несоответствии effective filter команда выводит
+warning и просит approve пользователя, а `--force` оставляет warning, но
+обходит approve.
+
+Текущее развитие задачи заблокировано issue `#11`, потому что новая семантика
+`run` должна строиться поверх более общего слоя user-friendly диагностики и
+operator interaction для `run`.
 
 ## Status
 
-Черновик анализа готов к human review и переводу issue в
-`Waiting for Plan Review`.
+Черновик анализа обновлен по review, но дальнейшая разработка заблокирована
+issue `#11` до ее реализации.
 
 ## Artifacts
 
@@ -46,7 +53,9 @@ assignee.
 - [../../../docs/adr/0009-deterministic-backlog-ordering.md](../../../docs/adr/0009-deterministic-backlog-ordering.md)
 - [../../../docs/adr/0021-cli-contract-poll-run-loop.md](../../../docs/adr/0021-cli-contract-poll-run-loop.md)
 - [../../../docs/adr/0027-zero-config-settings-template-and-runtime-default-layer.md](../../../docs/adr/0027-zero-config-settings-template-and-runtime-default-layer.md)
+- https://github.com/dapi/ai-teamlead/issues/11
 
 ## Open Questions
 
-Блокирующих вопросов по текущему issue не выявлено.
+Блокирующих вопросов по продуктовой формулировке не осталось, но реализация
+должна ждать завершения issue `#11`.
