@@ -25,6 +25,7 @@ runtime:
 zellij:
   session_name: "${REPO}"
   tab_name: "issue-analysis"
+  # tab_name_template: "#${ISSUE_NUMBER}"
   layout: "compact"
 
 launch_agent:

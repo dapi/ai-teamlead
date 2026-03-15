@@ -495,6 +495,8 @@ EOF
 }
 
 cleanup_zellij() {
+    # WARNING: this helper kills every visible zellij session.
+    # Use it only in isolated headless/docker test environments.
     while IFS= read -r session_name; do
         [[ -n "$session_name" ]] || continue
         zellij kill-session "$session_name" >/dev/null 2>&1 || true

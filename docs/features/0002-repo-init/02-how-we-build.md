@@ -99,6 +99,8 @@
   донастройки
 - `zellij.session_name` bootstrap-ится как template `${REPO}`
 - `zellij.tab_name` по умолчанию равно `issue-analysis`
+- optional `zellij.tab_name_template` показывается в шаблоне как commented
+  пример `#${ISSUE_NUMBER}`, но не включается по умолчанию
 - `zellij.layout` bootstrap-ится как `compact`, чтобы новая session по
   умолчанию поднималась в привычном built-in layout без bare technical tab
 - `./.ai-teamlead/zellij/analysis-tab.kdl` bootstrap-ится как versioned template

@@ -18,6 +18,8 @@
 - при `session missing` launcher корректно различает path `custom layout` и
   `default fallback`
 - `ai-teamlead` корректно находит или создает tab по `tab_name`
+- если задан `zellij.tab_name_template`, launcher использует issue-aware
+  effective tab name и сохраняет его в runtime metadata
 - analysis tab использует versioned tab-layout contract и не выглядит как bare
   technical tab, если project-local contract ожидает bar/plugins и другой UX
 - после запуска pane в runtime state записывается `pane_id`
@@ -39,6 +41,8 @@ Feature считается готовой, если:
 - `zellij.session_name` является versioned fallback, а не единственным
   источником target session
 - `zellij.tab_name` является stable semantic name
+- `zellij.tab_name_template` является optional issue-aware template для
+  tab-launch path и не подменяет stable role `zellij.tab_name`
 - generated `launch-layout.kdl` отвечает за analysis tab, а не за базовую
   session при `layout = None`
 - generated `launch-layout.kdl` не должен принудительно задавать
@@ -142,7 +146,7 @@ Feature считается готовой, если:
 Минимально необходимо видеть:
 
 - какой effective `session_name` ожидался
-- какой `tab_name` ожидался
+- какой effective `tab_name` ожидался
 - существовала ли session до запуска
 - был ли создан новый tab
 - какой branch создания session был выбран:

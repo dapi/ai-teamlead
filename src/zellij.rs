@@ -59,6 +59,10 @@ impl<'a> ZellijLauncher<'a> {
                 analysis_tab_template_path.display()
             ),
         )?;
+        append_launch_log(
+            &launch_log_path,
+            &format!("analysis-tab-name: {}", zellij.tab_name),
+        )?;
         let quoted_repo_root = shell_single_quote(repo_root.to_string_lossy().as_ref());
         let quoted_launch_agent = shell_single_quote("./.ai-teamlead/launch-agent.sh");
         let quoted_session_uuid = shell_single_quote(session_uuid);
@@ -745,6 +749,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            tab_name_template: None,
             layout: None,
         };
 
@@ -830,6 +835,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            tab_name_template: None,
             layout: Some("custom-layout".into()),
         };
 
@@ -903,6 +909,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            tab_name_template: None,
             layout: None,
         };
 
@@ -993,6 +1000,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            tab_name_template: None,
             layout: None,
         };
 
@@ -1049,6 +1057,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            tab_name_template: None,
             layout: None,
         };
 
@@ -1109,6 +1118,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            tab_name_template: None,
             layout: None,
         };
 
@@ -1162,6 +1172,7 @@ mod tests {
         let zellij = ZellijConfig {
             session_name: "ai-teamlead".into(),
             tab_name: "issue-analysis".into(),
+            tab_name_template: None,
             layout: Some("missing-layout".into()),
         };
 
