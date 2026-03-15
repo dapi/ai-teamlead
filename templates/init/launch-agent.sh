@@ -120,12 +120,61 @@ find_worktree_for_branch() {
     return 1
 }
 
+worktree_path_is_available() {
+    local target_path="$1"
+
+    if [[ ! -e "$target_path" ]]; then
+        return 0
+    fi
+
+    if [[ -d "$target_path" ]] && [[ -z "$(find "$target_path" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+resolve_available_worktree_root() {
+    local requested_root="$1"
+    if worktree_path_is_available "$requested_root"; then
+        printf '%s\n' "$requested_root"
+        return 0
+    fi
+
+    local repo_key
+    repo_key="$(
+        git rev-parse --git-common-dir \
+            | sha256sum \
+            | cut -c1-8
+    )"
+    local attempt=1
+    while true; do
+        local candidate_root="${requested_root}-${repo_key}"
+        if (( attempt > 1 )); then
+            candidate_root="${candidate_root}-${attempt}"
+        fi
+
+        if worktree_path_is_available "$candidate_root"; then
+            printf '%s\n' "$candidate_root"
+            return 0
+        fi
+
+        attempt=$((attempt + 1))
+    done
+}
+
 ensure_stage_worktree() {
     local existing_worktree
     existing_worktree="$(find_worktree_for_branch "$BRANCH" || true)"
     if [[ -n "$existing_worktree" ]]; then
         WORKTREE_ROOT="$(cd "$existing_worktree" && pwd -P)"
         return 0
+    fi
+
+    local requested_worktree_root="$WORKTREE_ROOT"
+    WORKTREE_ROOT="$(resolve_available_worktree_root "$requested_worktree_root")"
+    if [[ "$WORKTREE_ROOT" != "$requested_worktree_root" ]]; then
+        append_launch_log "requested worktree root is busy, using fallback root $WORKTREE_ROOT"
     fi
 
     mkdir -p "$(dirname "$WORKTREE_ROOT")"
@@ -154,16 +203,18 @@ run_project_init() {
 start_agent() {
     local prompt
     local issue_body_section=""
-    if [[ "$AI_TEAMLEAD_DEBUG" == "1" || ${#ISSUE_BODY} -le 300 ]]; then
+    local issue_title="${ISSUE_TITLE:-}"
+    local issue_body="${ISSUE_BODY:-}"
+    if [[ "$AI_TEAMLEAD_DEBUG" == "1" || ${#issue_body} -le 300 ]]; then
         issue_body_section="
 
 Issue Body:
-$ISSUE_BODY"
+$issue_body"
     fi
     prompt="$(cat "$FLOW_PATH")
 
 Issue URL: $ISSUE_URL
-Issue Title: $ISSUE_TITLE${issue_body_section}
+Issue Title: $issue_title${issue_body_section}
 Session UUID: $SESSION_UUID
 Flow stage: $FLOW_STAGE
 Stage branch: $BRANCH
@@ -174,12 +225,12 @@ Stage artifacts dir: $ARTIFACTS_DIR"
     if [[ -n "$agent_bin" && -x "$agent_bin" ]]; then
         case "$agent_kind" in
             claude)
-                append_launch_log "starting claude override binary worktree=$WORKTREE_ROOT"
-                exec "$agent_bin" --permission-mode bypassPermissions "$prompt"
+                append_launch_log "starting claude override binary args_count=${#CLAUDE_GLOBAL_ARGS[@]} worktree=$WORKTREE_ROOT"
+                exec "$agent_bin" "${CLAUDE_GLOBAL_ARGS[@]}" "$prompt"
                 ;;
             *)
-                append_launch_log "starting codex override binary worktree=$WORKTREE_ROOT"
-                exec "$agent_bin" --cd "$WORKTREE_ROOT" --no-alt-screen "$prompt"
+                append_launch_log "starting codex override binary args_count=${#CODEX_GLOBAL_ARGS[@]} worktree=$WORKTREE_ROOT"
+                exec "$agent_bin" --cd "$WORKTREE_ROOT" --no-alt-screen "${CODEX_GLOBAL_ARGS[@]}" "$prompt"
                 ;;
         esac
     fi

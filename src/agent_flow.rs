@@ -3,9 +3,9 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::fs;
 use std::net::IpAddr;
-use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::Utc;
@@ -772,7 +772,8 @@ fn map_container_mount_path(agent: AgentFlowAgent, host_path: &Path) -> Option<S
             {
                 Some("/input/live-home/.claude.json".to_string())
             } else if value.ends_with("/.claude.mcp-disabled.json")
-                || host_path.file_name().and_then(|v| v.to_str()) == Some(".claude.mcp-disabled.json")
+                || host_path.file_name().and_then(|v| v.to_str())
+                    == Some(".claude.mcp-disabled.json")
             {
                 Some("/input/live-home/.claude.mcp-disabled.json".to_string())
             } else if value.ends_with("/.config/claude") {
@@ -920,7 +921,7 @@ mkdir -p "$HOME"
     match plan.agent {
         AgentFlowAgent::Codex => {
             script.push_str(
-                "if [[ -d /input/live-home/.codex && ! -e \"$HOME/.codex\" ]]; then cp -a /input/live-home/.codex \"$HOME/.codex\"; fi\n",
+                "if [[ -d /input/live-home/.codex ]]; then mkdir -p \"$HOME/.codex\"; for file in auth.json config.toml version.json models_cache.json; do if [[ -f \"/input/live-home/.codex/$file\" ]]; then cp -a \"/input/live-home/.codex/$file\" \"$HOME/.codex/$file\"; fi; done; if [[ -d /input/live-home/.codex/rules ]]; then cp -a /input/live-home/.codex/rules \"$HOME/.codex/rules\"; fi; fi\n",
             );
             script.push_str("mkdir -p \"$HOME/.codex\"\n");
             script.push_str("cat >> \"$HOME/.codex/config.toml\" <<EOF\n");
@@ -940,9 +941,7 @@ mkdir -p "$HOME"
             script.push_str(
                 "if [[ ! -f \"$HOME/.claude.json\" ]]; then printf '{\"projects\":{}}\\n' > \"$HOME/.claude.json\"; fi\n",
             );
-            script.push_str(
-                "tmp_claude_state=\"$HOME/.claude.json.tmp\"\n",
-            );
+            script.push_str("tmp_claude_state=\"$HOME/.claude.json.tmp\"\n");
             script.push_str(
                 "jq --arg home \"$HOME\" --arg workspace \"$WORKSPACE_ROOT\" '.projects = (.projects // {}) | .projects[$home] = ((.projects[$home] // {}) + {hasTrustDialogAccepted: true, hasCompletedProjectOnboarding: true}) | .projects[$workspace] = ((.projects[$workspace] // {}) + {hasTrustDialogAccepted: true, hasCompletedProjectOnboarding: true})' \"$HOME/.claude.json\" > \"$tmp_claude_state\"\n",
             );
@@ -1119,10 +1118,89 @@ printf 'docker\n' > /artifacts/sandbox-runtime.txt
                 .ok_or_else(|| anyhow!("live scenario requires mounted live agent binary"))?;
             let _ = writeln!(
                 script,
-                "ln -sf {} \"$WORKSPACE_BIN/{}\"",
-                shell_single_quote(container_agent_binary_path),
+                "cat > \"$WORKSPACE_BIN/{}\" <<'EOF'",
                 live_binary_name
             );
+            script.push_str("#!/usr/bin/env bash\n");
+            script.push_str("set -euo pipefail\n");
+            match plan.agent {
+                AgentFlowAgent::Codex => {
+                    script.push_str("workdir=''\n");
+                    script.push_str("prompt=''\n");
+                    script.push_str("args=()\n");
+                    script.push_str("while [[ $# -gt 0 ]]; do\n");
+                    script.push_str("  case \"$1\" in\n");
+                    script.push_str("    --cd)\n");
+                    script.push_str("      workdir=\"$2\"\n");
+                    script.push_str("      shift 2\n");
+                    script.push_str("      ;;\n");
+                    script.push_str("    --no-alt-screen)\n");
+                    script.push_str("      shift\n");
+                    script.push_str("      ;;\n");
+                    script.push_str("    --full-auto)\n");
+                    script.push_str("      shift\n");
+                    script.push_str("      ;;\n");
+                    script.push_str("    *)\n");
+                    script.push_str("      if [[ $# -eq 1 ]]; then\n");
+                    script.push_str("        prompt=\"$1\"\n");
+                    script.push_str("        shift\n");
+                    script.push_str("      else\n");
+                    script.push_str("        args+=(\"$1\")\n");
+                    script.push_str("        shift\n");
+                    script.push_str("      fi\n");
+                    script.push_str("      ;;\n");
+                    script.push_str("  esac\n");
+                    script.push_str("done\n");
+                    script.push_str("cmd=(");
+                    let _ = writeln!(
+                        script,
+                        "{} exec '--dangerously-bypass-approvals-and-sandbox' '--skip-git-repo-check' '--color' 'never'",
+                        shell_single_quote(container_agent_binary_path)
+                    );
+                    script.push_str(")\n");
+                    script.push_str("if [[ -n \"$workdir\" ]]; then\n");
+                    script.push_str("  cmd+=('--cd' \"$workdir\")\n");
+                    script.push_str("fi\n");
+                    script.push_str("if [[ ${#args[@]} -gt 0 ]]; then\n");
+                    script.push_str("  cmd+=(\"${args[@]}\")\n");
+                    script.push_str("fi\n");
+                    script.push_str("exec \"${cmd[@]}\" \"$prompt\"\n");
+                }
+                AgentFlowAgent::Claude => {
+                    script.push_str("prompt=''\n");
+                    script.push_str("args=()\n");
+                    script.push_str("while [[ $# -gt 0 ]]; do\n");
+                    script.push_str("  case \"$1\" in\n");
+                    script.push_str("    --permission-mode)\n");
+                    script.push_str("      shift 2\n");
+                    script.push_str("      ;;\n");
+                    script.push_str("    *)\n");
+                    script.push_str("      if [[ $# -eq 1 ]]; then\n");
+                    script.push_str("        prompt=\"$1\"\n");
+                    script.push_str("        shift\n");
+                    script.push_str("      else\n");
+                    script.push_str("        args+=(\"$1\")\n");
+                    script.push_str("        shift\n");
+                    script.push_str("      fi\n");
+                    script.push_str("      ;;\n");
+                    script.push_str("  esac\n");
+                    script.push_str("done\n");
+                    script.push_str("cmd=(");
+                    let _ = writeln!(
+                        script,
+                        "{} '--print' '--dangerously-skip-permissions'",
+                        shell_single_quote(container_agent_binary_path)
+                    );
+                    script.push_str(")\n");
+                    script.push_str("if [[ ${#args[@]} -gt 0 ]]; then\n");
+                    script.push_str("  cmd+=(\"${args[@]}\")\n");
+                    script.push_str("fi\n");
+                    script.push_str("exec \"${cmd[@]}\" \"$prompt\"\n");
+                }
+                AgentFlowAgent::Stub => unreachable!("stub agent is handled above"),
+            }
+            script.push_str("EOF\n");
+            let _ = writeln!(script, "chmod +x \"$WORKSPACE_BIN/{}\"", live_binary_name);
             let _ = writeln!(
                 script,
                 "export AI_TEAMLEAD_AGENT_BIN=\"$WORKSPACE_BIN/{}\"",
@@ -1567,7 +1645,9 @@ fn normalize_repo_relative_path(repo_root: &Path, path: PathBuf) -> PathBuf {
 }
 
 fn default_artifacts_dir(git_dir: &Path) -> PathBuf {
-    git_dir.join(".ai-teamlead").join(DEFAULT_ARTIFACTS_DIR_NAME)
+    git_dir
+        .join(".ai-teamlead")
+        .join(DEFAULT_ARTIFACTS_DIR_NAME)
 }
 
 fn verify_sandbox_result(plan: &AgentFlowTestPlan, result: &SandboxRunResult) -> Result<()> {
@@ -1900,7 +1980,11 @@ assertions:
     fn plan_uses_git_dir_artifacts_dir_by_default() {
         let temp = tempdir().expect("tempdir");
         let repo_root = temp.path().join("repo");
-        let git_dir = temp.path().join("git-common").join("worktrees").join("feature");
+        let git_dir = temp
+            .path()
+            .join("git-common")
+            .join("worktrees")
+            .join("feature");
         fs::create_dir_all(&repo_root).expect("repo root");
         fs::create_dir_all(&git_dir).expect("git dir");
         write_fixture(&repo_root, "basic.json", "{}\n");
@@ -1938,7 +2022,9 @@ assertions:
 
         assert_eq!(
             plan.artifacts_dir,
-            git_dir.join(".ai-teamlead").join(DEFAULT_ARTIFACTS_DIR_NAME)
+            git_dir
+                .join(".ai-teamlead")
+                .join(DEFAULT_ARTIFACTS_DIR_NAME)
         );
     }
 
@@ -2118,8 +2204,11 @@ commands:
         )
         .expect("agent binary target");
         #[cfg(unix)]
-        std::os::unix::fs::symlink("../lib/node_modules/@openai/codex/bin/codex.js", &agent_binary)
-            .expect("agent binary symlink");
+        std::os::unix::fs::symlink(
+            "../lib/node_modules/@openai/codex/bin/codex.js",
+            &agent_binary,
+        )
+        .expect("agent binary symlink");
         #[cfg(not(unix))]
         fs::write(&agent_binary, "#!/usr/bin/env bash\n").expect("agent binary");
         let shell = RecordingShell::default();
@@ -2174,6 +2263,11 @@ commands:
             codex_home.display()
         )));
         assert!(command.contains("-e OPENAI_API_KEY"));
+        assert!(command.contains("--dangerously-bypass-approvals-and-sandbox"));
+        assert!(
+            command.contains("for file in auth.json config.toml version.json models_cache.json")
+        );
+        assert!(!command.contains("cp -a /input/live-home/.codex \"$HOME/.codex\""));
         assert!(command.contains("[projects.\"$HOME\"]"));
         assert!(command.contains("[projects.\"$WORKSPACE_ROOT\"]"));
         assert!(command.contains("AI_TEAMLEAD_TEST_GH_FIXTURES_DIR"));
@@ -2289,6 +2383,7 @@ commands:
             claude_config.display()
         )));
         assert!(command.contains("-e ANTHROPIC_API_KEY"));
+        assert!(command.contains("--dangerously-skip-permissions"));
         assert!(command.contains("hasTrustDialogAccepted"));
         assert!(command.contains("hasCompletedProjectOnboarding"));
     }
@@ -2308,11 +2403,9 @@ commands:
                 .expect("mount");
         assert_eq!(claude_home, "/input/live-home/.claude");
 
-        let claude_state = map_container_mount_path(
-            AgentFlowAgent::Claude,
-            Path::new("/home/test/.claude.json"),
-        )
-        .expect("mount");
+        let claude_state =
+            map_container_mount_path(AgentFlowAgent::Claude, Path::new("/home/test/.claude.json"))
+                .expect("mount");
         assert_eq!(claude_state, "/input/live-home/.claude.json");
 
         let claude_mcp_state = map_container_mount_path(
@@ -2320,7 +2413,10 @@ commands:
             Path::new("/home/test/.claude.mcp-disabled.json"),
         )
         .expect("mount");
-        assert_eq!(claude_mcp_state, "/input/live-home/.claude.mcp-disabled.json");
+        assert_eq!(
+            claude_mcp_state,
+            "/input/live-home/.claude.mcp-disabled.json"
+        );
 
         let claude_config = map_container_mount_path(
             AgentFlowAgent::Claude,
@@ -2382,7 +2478,12 @@ commands:
         .expect("preflight");
 
         assert_eq!(summary.auth_path, AuthPath::SubscriptionAccount);
-        assert!(summary.forwarded_env_vars.iter().any(|name| name == "HTTP_PROXY"));
+        assert!(
+            summary
+                .forwarded_env_vars
+                .iter()
+                .any(|name| name == "HTTP_PROXY")
+        );
     }
 
     #[test]
