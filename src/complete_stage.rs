@@ -181,8 +181,13 @@ fn execute_complete_stage(
     );
 
     if matches!(context.outcome, StageOutcome::Merged) {
-        let target_status =
-            finalize_merged_implementation(shell, &context.repo_root, &runtime, &config, &manifest)?;
+        let target_status = finalize_merged_implementation(
+            shell,
+            &context.repo_root,
+            &runtime,
+            &config,
+            &manifest,
+        )?;
         println!(
             "complete-stage: issue=#{} stage={} outcome={} status={}",
             manifest.issue_number,
@@ -254,7 +259,9 @@ fn execute_complete_stage(
     }
 
     if context.stage == FlowStage::Implementation {
-        if let Some(pr) = tracked_pr.or_else(|| find_existing_pr(shell, &context.worktree_root, &branch)) {
+        if let Some(pr) =
+            tracked_pr.or_else(|| find_existing_pr(shell, &context.worktree_root, &branch))
+        {
             runtime.update_tracked_pr(session_uuid, pr.number, &pr.url)?;
         }
     }
@@ -486,9 +493,7 @@ fn cleanup_implementation_artifacts(
 
     if let Some(branch) = manifest.stage_branch.as_deref() {
         if let Err(error) = shell.run(repo_root, "git", &["branch", "-d", branch]) {
-            eprintln!(
-                "complete-stage: warning: failed to delete local branch {branch}: {error}"
-            );
+            eprintln!("complete-stage: warning: failed to delete local branch {branch}: {error}");
         }
     }
 }
@@ -1201,7 +1206,8 @@ mod tests {
             outcome: StageOutcome::Merged,
         };
 
-        execute_complete_stage(&shell, &manifest.session_uuid, context).expect("merged finalization");
+        execute_complete_stage(&shell, &manifest.session_uuid, context)
+            .expect("merged finalization");
 
         let updated_issue = runtime
             .load_issue_index(15)
@@ -1217,7 +1223,11 @@ mod tests {
 
         let calls = shell.calls();
         assert!(calls.iter().any(|call| call == "gh issue close 15"));
-        assert!(calls.iter().any(|call| call == "git branch -d implementation/issue-15"));
+        assert!(
+            calls
+                .iter()
+                .any(|call| call == "git branch -d implementation/issue-15")
+        );
         assert!(
             calls.iter().all(|call| !call.starts_with("git add ")),
             "merged path must not stage artifacts"

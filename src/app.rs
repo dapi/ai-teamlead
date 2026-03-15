@@ -194,8 +194,7 @@ fn run_manual_run(
         })
         .ok_or_else(|| anyhow::anyhow!("issue #{issue_number} is not linked to the project"))?;
 
-    let launch =
-        run_issue_entrypoint(shell, &context, &github, &zellij, &snapshot, issue, debug)?;
+    let launch = run_issue_entrypoint(shell, &context, &github, &zellij, &snapshot, issue, debug)?;
     if launch.launched {
         println!(
             "run: issue=#{} launched in zellij session_uuid={}",
@@ -489,7 +488,13 @@ fn maybe_finalize_merged_implementation(
     issue: &ProjectIssueItem,
     current_status: &str,
 ) -> Result<Option<LaunchOutcome>> {
-    if current_status != context.config.issue_implementation_flow.statuses.waiting_for_code_review {
+    if current_status
+        != context
+            .config
+            .issue_implementation_flow
+            .statuses
+            .waiting_for_code_review
+    {
         return Ok(None);
     }
 

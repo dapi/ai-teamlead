@@ -538,8 +538,14 @@ mod tests {
             updated.stage_branch.as_deref(),
             Some("implementation/issue-42")
         );
-        assert_eq!(updated.stage_worktree_root.as_deref(), Some(worktree_root.as_path()));
-        assert_eq!(updated.stage_artifacts_dir.as_deref(), Some("specs/issues/42"));
+        assert_eq!(
+            updated.stage_worktree_root.as_deref(),
+            Some(worktree_root.as_path())
+        );
+        assert_eq!(
+            updated.stage_artifacts_dir.as_deref(),
+            Some("specs/issues/42")
+        );
         assert_eq!(updated.tracked_pr_number, Some(99));
         assert_eq!(
             updated.tracked_pr_url.as_deref(),
