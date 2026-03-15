@@ -1,4 +1,4 @@
-# ADR-0029: untrusted GitHub content as hostile input
+# ADR-0029: недоверенный контент GitHub как враждебный ввод
 
 Статус: accepted
 Дата: 2026-03-14

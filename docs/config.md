@@ -213,3 +213,10 @@ repo-local runtime-артефактах внутри `.git/.ai-teamlead/`.
 - [./features/0003-agent-launch-orchestration/README.md](./features/0003-agent-launch-orchestration/README.md)
 - [./adr/0001-repo-local-ai-config.md](./adr/0001-repo-local-ai-config.md)
 - [./adr/0032-zellij-launch-target-pane-tab.md](./adr/0032-zellij-launch-target-pane-tab.md)
+
+## Журнал изменений
+
+### 2026-03-15
+
+- добавлен журнал изменений
+- документ приведён к стандарту SSOT

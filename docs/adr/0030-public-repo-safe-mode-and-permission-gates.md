@@ -1,4 +1,4 @@
-# ADR-0030: public repo safe mode and permission gates
+# ADR-0030: безопасный режим для публичных репозиториев и контроль разрешений
 
 Статус: accepted
 Дата: 2026-03-14

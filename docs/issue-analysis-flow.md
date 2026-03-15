@@ -836,12 +836,6 @@ Issue должна переводиться в `Analysis Blocked`, если:
 
 ## Журнал изменений
 
-### 2026-03-14 (2)
-
-- добавлен контракт завершения стадии `complete-stage` (ADR-0020)
-- закрыт открытый вопрос о machine-readable артефактах — решение через
-  CLI-команду `ai-teamlead internal complete-stage`
-
 ### 2026-03-13
 
 - создан начальный SSOT для `issue-analysis-flow`
@@ -884,10 +878,11 @@ Issue должна переводиться в `Analysis Blocked`, если:
   над `poll`
 - уточнено, что первичный вход в flow идет через `Backlog`, а повторный ручной
   вход регулируется отдельными правилами `run`
-- добавлен контракт завершения стадии через
-  `ai-teamlead internal complete-stage`
+- добавлен контракт завершения стадии `complete-stage` (ADR-0020)
 - orchestration commit/push/draft PR выведен из prompt-обязанностей агента в
   CLI-команду завершения стадии
+- закрыт открытый вопрос о machine-readable артефактах — решение через
+  CLI-команду `ai-teamlead internal complete-stage`
 
 ### 2026-03-15
 

@@ -110,17 +110,21 @@ Runtime state не должен подменять project status и не дол
 
 ## Approved analysis artifacts
 
-Implementation flow может стартовать только если approved analysis artifacts
+Implementation flow может стартовать только если analysis artifacts
 доступны как versioned вход в:
 
 - `specs/issues/${ISSUE_NUMBER}/`
 
 Минимальный контракт:
 
-- пакет анализа имеет `Статус согласования: approved`;
-- пакет анализа фиксирует `Approved By` и `Approved At`;
-- если approved artifacts отсутствуют или невалидны, implementation flow
-  завершается blocker-исходом, а не продолжает работу по догадкам.
+- артефакты зафиксированы командой `complete-stage --outcome plan-ready`
+  (commit + push в analysis branch);
+- issue переведена в `Ready for Implementation` через human gate
+  (`Waiting for Plan Review` → `Ready for Implementation`) — сам переход
+  является сигналом approval;
+- если артефакты отсутствуют или issue не находится в статусе
+  `Ready for Implementation`, implementation flow завершается
+  blocker-исходом, а не продолжает работу по догадкам.
 
 ## Статусы GitHub Project
 
@@ -405,3 +409,7 @@ launch_agent:
   как accepted replacement для соответствующих частей ADR-0025/0026/0027
 - добавлено требование явно восстанавливать и выполнять план изменений
   документации в implementation stage
+- упрощён контракт approved analysis artifacts: approval определяется
+  фактом commit через `complete-stage` и переходом issue в
+  `Ready for Implementation` через human gate; отдельные metadata-поля
+  (`Статус согласования`, `Approved By`, `Approved At`) убраны
