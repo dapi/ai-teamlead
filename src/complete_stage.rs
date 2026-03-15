@@ -8,6 +8,7 @@ use crate::domain::FlowStage;
 use crate::github::{GhProjectClient, ProjectIssueItem, PullRequestDetails, PullRequestSummary};
 use crate::runtime::{RuntimeLayout, SessionManifest};
 use crate::shell::Shell;
+use crate::templates::render_template;
 
 #[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
 pub enum StageOutcome {
@@ -68,12 +69,16 @@ impl StageOutcome {
     }
 }
 
-pub fn tracked_pr_is_merged(
+pub fn canonical_pr_is_merged(
     shell: &dyn Shell,
     repo_root: &Path,
-    manifest: &SessionManifest,
+    canonical_branch: &str,
 ) -> Result<bool> {
-    Ok(load_tracked_pull_request(shell, repo_root, manifest)?.is_merged())
+    Ok(
+        resolve_canonical_pull_request(shell, repo_root, canonical_branch)?
+            .map(|pull_request| pull_request.is_merged())
+            .unwrap_or(false),
+    )
 }
 
 pub fn finalize_merged_implementation(
@@ -81,41 +86,53 @@ pub fn finalize_merged_implementation(
     repo_root: &Path,
     runtime: &RuntimeLayout,
     config: &Config,
-    manifest: &SessionManifest,
+    manifest: Option<&SessionManifest>,
+    issue_number: u64,
+    project_id: &str,
+    github_owner: &str,
+    github_repo: &str,
+    canonical_branch: &str,
 ) -> Result<String> {
-    anyhow::ensure!(
-        manifest.stage == FlowStage::Implementation,
-        "merged finalization requires implementation session, got '{}'",
-        manifest.stage.as_str()
-    );
-    let pull_request = load_tracked_pull_request(shell, repo_root, manifest)?;
+    if let Some(manifest) = manifest {
+        anyhow::ensure!(
+            manifest.stage == FlowStage::Implementation,
+            "merged finalization requires implementation session, got '{}'",
+            manifest.stage.as_str()
+        );
+    }
+    let pull_request = resolve_canonical_pull_request(shell, repo_root, canonical_branch)?
+        .ok_or_else(|| {
+            anyhow!("canonical implementation PR is missing for '{canonical_branch}'")
+        })?;
     anyhow::ensure!(
         pull_request.is_merged(),
-        "tracked implementation PR #{} is not merged",
+        "canonical implementation PR #{} is not merged",
         pull_request.number
     );
 
     let github = GhProjectClient::new(shell);
-    let snapshot = github.load_project_snapshot(repo_root, &manifest.project_id)?;
-    let issue_item = find_project_item(&snapshot.items, manifest)?;
+    let snapshot = github.load_project_snapshot(repo_root, project_id)?;
+    let issue_item = find_project_item(&snapshot.items, issue_number, github_owner, github_repo)?;
     let target_status = config.issue_implementation_flow.statuses.done.as_str();
     let option_id = snapshot.option_id_by_name(target_status)?;
 
     github.update_status(
         repo_root,
-        &manifest.project_id,
+        project_id,
         &issue_item.item_id,
         &snapshot.status_field_id,
         option_id,
     )?;
 
     if issue_item.issue_state == "OPEN" {
-        github.close_issue(repo_root, manifest.issue_number)?;
+        github.close_issue(repo_root, issue_number)?;
     }
 
-    runtime.update_issue_flow_status(manifest.issue_number, target_status)?;
-    runtime.update_session_status(&manifest.session_uuid, "completed")?;
-    cleanup_implementation_artifacts(shell, repo_root, manifest);
+    runtime.update_issue_flow_status(issue_number, target_status)?;
+    if let Some(manifest) = manifest {
+        runtime.update_session_status(&manifest.session_uuid, "completed")?;
+        cleanup_implementation_artifacts(shell, repo_root, manifest);
+    }
 
     Ok(target_status.to_string())
 }
@@ -186,7 +203,12 @@ fn execute_complete_stage(
             &context.repo_root,
             &runtime,
             &config,
-            &manifest,
+            Some(&manifest),
+            manifest.issue_number,
+            &manifest.project_id,
+            &manifest.github_owner,
+            &manifest.github_repo,
+            &canonical_implementation_branch(&config, &manifest)?,
         )?;
         println!(
             "complete-stage: issue=#{} stage={} outcome={} status={}",
@@ -258,13 +280,7 @@ fn execute_complete_stage(
         mark_pr_ready_if_possible(shell, &context.worktree_root, &branch)?;
     }
 
-    if context.stage == FlowStage::Implementation {
-        if let Some(pr) =
-            tracked_pr.or_else(|| find_existing_pr(shell, &context.worktree_root, &branch))
-        {
-            runtime.update_tracked_pr(session_uuid, pr.number, &pr.url)?;
-        }
-    }
+    let _ = tracked_pr.or_else(|| find_existing_pr(shell, &context.worktree_root, &branch));
 
     let target_status = context.outcome.target_status(
         context.stage,
@@ -434,7 +450,12 @@ fn update_project_status(
 ) -> Result<()> {
     let github = GhProjectClient::new(shell);
     let snapshot = github.load_project_snapshot(repo_root, &manifest.project_id)?;
-    let issue_item = find_project_item(&snapshot.items, manifest)?;
+    let issue_item = find_project_item(
+        &snapshot.items,
+        manifest.issue_number,
+        &manifest.github_owner,
+        &manifest.github_repo,
+    )?;
     let option_id = snapshot.option_id_by_name(target_status)?;
 
     github.update_status(
@@ -447,16 +468,29 @@ fn update_project_status(
     Ok(())
 }
 
-fn load_tracked_pull_request(
+fn resolve_canonical_pull_request(
     shell: &dyn Shell,
     repo_root: &Path,
-    manifest: &SessionManifest,
-) -> Result<PullRequestDetails> {
-    let pr_number = manifest
-        .tracked_pr_number
-        .ok_or_else(|| anyhow!("tracked implementation PR metadata is missing"))?;
+    canonical_branch: &str,
+) -> Result<Option<PullRequestDetails>> {
     let github = GhProjectClient::new(shell);
-    github.load_pull_request(repo_root, pr_number)
+    github.resolve_pull_request_for_head(repo_root, canonical_branch)
+}
+
+fn canonical_implementation_branch(config: &Config, manifest: &SessionManifest) -> Result<String> {
+    if let Some(branch) = manifest.stage_branch.as_deref() {
+        return Ok(branch.to_string());
+    }
+    let home = std::env::var("HOME").unwrap_or_default();
+    let issue_number = manifest.issue_number.to_string();
+    Ok(render_template(
+        &config.launch_agent.implementation_branch_template,
+        &[
+            ("HOME", home.as_str()),
+            ("REPO", manifest.github_repo.as_str()),
+            ("ISSUE_NUMBER", issue_number.as_str()),
+        ],
+    ))
 }
 
 fn cleanup_implementation_artifacts(
@@ -500,20 +534,16 @@ fn cleanup_implementation_artifacts(
 
 fn find_project_item<'a>(
     items: &'a [ProjectIssueItem],
-    manifest: &SessionManifest,
+    issue_number: u64,
+    github_owner: &str,
+    github_repo: &str,
 ) -> Result<&'a ProjectIssueItem> {
     items
         .iter()
         .find(|item| {
-            item.issue_number == manifest.issue_number
-                && item.matches_repo(&manifest.github_owner, &manifest.github_repo)
+            item.issue_number == issue_number && item.matches_repo(github_owner, github_repo)
         })
-        .ok_or_else(|| {
-            anyhow!(
-                "issue #{} not found in project snapshot",
-                manifest.issue_number
-            )
-        })
+        .ok_or_else(|| anyhow!("issue #{} not found in project snapshot", issue_number))
 }
 
 fn collect_artifact_files(worktree_root: &Path, artifacts_dir: &str) -> Result<Vec<String>> {
@@ -1174,17 +1204,14 @@ mod tests {
             )
             .expect("workspace metadata");
         runtime
-            .update_tracked_pr(
-                &manifest.session_uuid,
-                99,
-                "https://github.com/dapi/ai-teamlead/pull/99",
-            )
-            .expect("tracked pr");
-        runtime
             .update_session_status(&manifest.session_uuid, "completed")
             .expect("completed status");
 
         let shell = FakeShell::default()
+            .with_response(
+                "gh pr list --head implementation/issue-15 --json number,url",
+                r#"[{"number":99,"url":"https://github.com/dapi/ai-teamlead/pull/99"}]"#,
+            )
             .with_response(
                 "gh pr view 99 --json number,url,state,mergedAt,isDraft,headRefName,baseRefName",
                 r#"{"number":99,"url":"https://github.com/dapi/ai-teamlead/pull/99","state":"MERGED","mergedAt":"2026-03-14T20:00:00Z","isDraft":false,"headRefName":"implementation/issue-15","baseRefName":"main"}"#,
@@ -1227,6 +1254,11 @@ mod tests {
         assert_eq!(updated_manifest.status, "completed");
 
         let calls = shell.calls();
+        assert!(
+            calls
+                .iter()
+                .any(|call| call == "gh pr list --head implementation/issue-15 --json number,url")
+        );
         assert!(calls.iter().any(|call| call == "gh issue close 15"));
         assert!(
             calls

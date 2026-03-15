@@ -190,6 +190,21 @@ impl<'a> GhProjectClient<'a> {
         parse_json_prefix(&stdout).context("failed to parse pull request details response")
     }
 
+    pub fn resolve_pull_request_for_head(
+        &self,
+        cwd: &Path,
+        branch: &str,
+    ) -> Result<Option<PullRequestDetails>> {
+        let pull_requests = self.list_pull_requests_for_head(cwd, branch)?;
+        match pull_requests.as_slice() {
+            [] => Ok(None),
+            [pull_request] => self.load_pull_request(cwd, pull_request.number).map(Some),
+            _ => Err(anyhow!(
+                "multiple pull requests found for canonical branch '{branch}'"
+            )),
+        }
+    }
+
     pub fn close_issue(&self, cwd: &Path, issue_number: u64) -> Result<()> {
         self.shell
             .run(cwd, "gh", &["issue", "close", &issue_number.to_string()])?;
@@ -493,5 +508,19 @@ mod tests {
         assert!(pr.is_merged());
         assert_eq!(pr.head_ref_name, "implementation/issue-42");
         assert_eq!(pr.base_ref_name, "main");
+    }
+
+    #[test]
+    fn rejects_ambiguous_pull_request_list_for_head() {
+        let shell = FakeShell::default().with_response(
+            "gh pr list --head implementation/issue-42 --json number,url",
+            r#"[{"number":99,"url":"https://github.com/dapi/teamlead/pull/99"},{"number":100,"url":"https://github.com/dapi/teamlead/pull/100"}]"#,
+        );
+        let client = GhProjectClient::new(&shell);
+
+        let error = client
+            .resolve_pull_request_for_head(Path::new("/repo"), "implementation/issue-42")
+            .expect_err("ambiguous PR list should fail");
+        assert!(error.to_string().contains("multiple pull requests found"));
     }
 }

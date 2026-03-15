@@ -8,7 +8,7 @@ use clap::Parser;
 
 use crate::cli::{Cli, Command, InternalCommand};
 use crate::complete_stage::{
-    finalize_merged_implementation, run_complete_stage, tracked_pr_is_merged,
+    canonical_pr_is_merged, finalize_merged_implementation, run_complete_stage,
 };
 use crate::config::Config;
 use crate::domain::{
@@ -501,28 +501,34 @@ fn maybe_finalize_merged_implementation(
         return Ok(None);
     }
 
-    let Some(issue_index) = context.runtime.load_issue_index(issue.issue_number)? else {
-        return Ok(None);
-    };
-    let Some(session_uuid) = issue_index.session_uuid_for_stage(FlowStage::Implementation) else {
-        return Ok(None);
-    };
-    let Some(manifest) = context.runtime.load_session_manifest(session_uuid)? else {
-        return Ok(None);
-    };
-    if manifest.stage != FlowStage::Implementation || manifest.tracked_pr_number.is_none() {
-        return Ok(None);
-    }
-    if !tracked_pr_is_merged(shell, &context.repo.repo_root, &manifest)? {
+    let launch_context =
+        render_launch_agent_context(context, issue.issue_number, FlowStage::Implementation)?;
+    if !canonical_pr_is_merged(shell, &context.repo.repo_root, &launch_context.branch)? {
         return Ok(None);
     }
 
+    let manifest = context
+        .runtime
+        .load_issue_index(issue.issue_number)?
+        .and_then(|issue_index| {
+            issue_index
+                .session_uuid_for_stage(FlowStage::Implementation)
+                .map(str::to_string)
+        })
+        .map(|session_uuid| context.runtime.load_session_manifest(&session_uuid))
+        .transpose()?
+        .flatten();
     let target_status = finalize_merged_implementation(
         shell,
         &context.repo.repo_root,
         &context.runtime,
         &context.config,
-        &manifest,
+        manifest.as_ref(),
+        issue.issue_number,
+        &context.config.github.project_id,
+        &context.repo.github_owner,
+        &context.repo.github_repo,
+        &launch_context.branch,
     )?;
     println!(
         "run: issue=#{} reconciled merged implementation PR -> {}",
@@ -531,7 +537,9 @@ fn maybe_finalize_merged_implementation(
 
     Ok(Some(LaunchOutcome {
         issue_number: issue.issue_number,
-        session_uuid: manifest.session_uuid,
+        session_uuid: manifest
+            .map(|manifest| manifest.session_uuid)
+            .unwrap_or_else(|| "none".to_string()),
         launched: false,
     }))
 }

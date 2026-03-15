@@ -17,6 +17,7 @@ EOF
 install_gh_stub "$STUB_BIN" "$GH_SNAPSHOT" "$GH_LOG"
 install_agent_stubs "$STUB_BIN" "$STUB_OUT"
 export PATH="$STUB_BIN:$PATH"
+export AI_TEAMLEAD_TEST_GH_PR_LIST_RESULT='[{"number":99,"url":"https://github.com/dapi/example/pull/99"}]'
 export AI_TEAMLEAD_TEST_GH_PR_VIEW_RESULT='{"number":99,"url":"https://github.com/dapi/example/pull/99","state":"MERGED","mergedAt":"2026-03-14T20:00:00Z","isDraft":false,"headRefName":"implementation/issue-42","baseRefName":"main"}'
 
 SESSION_UUID="implementation-session-42"
@@ -48,8 +49,6 @@ cat > "$REPO_ROOT/.git/.ai-teamlead/sessions/$SESSION_UUID/session.json" <<EOF
   "updated_at": "2026-03-14T20:00:00Z",
   "stage_branch": "implementation/issue-42",
   "stage_artifacts_dir": "specs/issues/42",
-  "tracked_pr_number": 99,
-  "tracked_pr_url": "https://github.com/dapi/example/pull/99",
   "zellij": {
     "session_name": "example",
     "tab_name": "issue-analysis",
@@ -72,7 +71,8 @@ assert_text_contains "$RUN_OUTPUT" "reconciled merged implementation PR -> Done"
 assert_text_contains "$RUN_OUTPUT" "finalized without launch" "run skipped zellij launch after merge"
 assert_eq "$(jq -r '.last_known_flow_status' "$ISSUE_INDEX")" "Done" "run moved issue flow status to Done"
 assert_eq "$(jq -r '.status' "$SESSION_MANIFEST")" "completed" "run kept implementation session completed"
-assert_file_contains "$GH_LOG" "gh pr view 99 --json number,url,state,mergedAt,isDraft,headRefName,baseRefName" "run inspected tracked PR merge state"
+assert_file_contains "$GH_LOG" "gh pr list --head implementation/issue-42 --json number,url" "run listed canonical implementation PR by branch"
+assert_file_contains "$GH_LOG" "gh pr view 99 --json number,url,state,mergedAt,isDraft,headRefName,baseRefName" "run inspected canonical PR merge state"
 assert_file_contains "$GH_LOG" "optionId=OPT_DONE" "run updated GitHub Project status to Done"
 assert_file_contains "$GH_LOG" "gh issue close 42" "run closed GitHub issue after merged PR"
 
