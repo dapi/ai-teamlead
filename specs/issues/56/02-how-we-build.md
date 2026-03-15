@@ -8,6 +8,15 @@
 Реализацию нужно делать как поэтапное внедрение уже принятого security
 contract, а не как новую перепридуманную модель.
 
+Для этой issue порядок источников security/runtime contract такой:
+
+1. SSOT [../../../docs/untrusted-input-security.md](../../../docs/untrusted-input-security.md)
+   и ADR `0029/0030`;
+2. этот issue-level handoff, который конкретизирует operational details для
+   implementation;
+3. feature `0006` как summary-layer, который должен быть синхронизирован после
+   реализации, но не переопределяет более точный issue-level contract молча.
+
 Технический подход:
 
 - использовать feature `0006`, SSOT `untrusted-input-security` и ADR
@@ -120,6 +129,31 @@ contract, а не как новую перепридуманную модель.
    git/gh context без чтения issue content;
 3. `unknown`, если reliable metadata не удалось получить.
 
+## Author Resolution And Intake Identity
+
+`intake_policy` должна использовать единый источник identity:
+
+- issue author login, полученный из канонической GitHub metadata;
+- comments не участвуют в intake eligibility и не могут менять intake decision;
+- operator identity для `owner-only` берется из account context, под которым
+  запущен `ai-teamlead` и выполняются канонические GitHub actions этого
+  workflow.
+
+Правила resolution:
+
+- `owner-only`: issue author login должен совпадать с operator login;
+- `allowlist`: issue author login должен входить в
+  `security.public_repo.issue_author_allowlist`;
+- org membership сама по себе не является достаточным основанием для intake;
+- bot/service account допускается только при явном presence в allowlist;
+- missing author metadata приводит к `skipped` для `poll` и допускает только
+  `manual-override` для explicit `run`.
+
+Отдельное правило:
+
+- issue author влияет только на intake;
+- comment author никогда не дает trust upgrade и не участвует в approval path.
+
 ## Risk Policy Matrix
 
 Для `public-safe` режима минимальная policy-матрица должна быть такой:
@@ -133,6 +167,53 @@ contract, а не как новую перепридуманную модель.
 
 Если действие не попало ни в одну allow/approval-категорию, оно трактуется как
 `deny` в `public-safe` режиме.
+
+## Publication Scope
+
+Для MVP publication path должен быть ограничен следующими sink-ами:
+
+- канонический GitHub workflow path самого `ai-teamlead`:
+  issue comments, PR body, PR comments, status-linked artifacts;
+- versioned docs и code changes внутри текущего repo/worktree;
+- runtime diagnostics, которые остаются локальными и не публикуются наружу без
+  отдельного approval.
+
+По умолчанию неразрешенные publish sinks:
+
+- произвольные внешние paste/file-sharing сервисы;
+- email, chat, webhook и любые каналы вне канонического GitHub workflow;
+- uploads бинарных или raw runtime artifacts без secret-scrub.
+
+Payload classes для MVP:
+
+- `safe-workflow-metadata`: status updates, plan summaries, versioned doc links;
+- `reviewable-artifacts`: versioned markdown/code diff после normal workflow;
+- `sensitive-local-data`: secrets, tokens, raw configs, env dumps, host paths,
+  runtime artifacts с непроверенным содержимым.
+
+Только первые две категории могут попадать в publication allow/approval path;
+`sensitive-local-data` всегда `deny`.
+
+## Approval Lifecycle And Storage
+
+MVP approval contract:
+
+- approval one-shot и action-bound;
+- approval valid только внутри текущего `session_uuid`;
+- approval reusable только для того же `action_kind` и того же
+  `target_fingerprint` в рамках текущей session;
+- новый target, новый `session_uuid`, restart/re-run или изменившийся target
+  invalidates previous approval;
+- `expires_at` по умолчанию равен завершению session либо более раннему явному
+  invalidation event.
+
+Source of truth и storage:
+
+- `approval_record` хранится в runtime artifacts текущей session;
+- audit trail должен быть append-only или атомарно перезаписываемым так, чтобы
+  частичная запись не трактовалась как granted approval;
+- если запись approval record не удалась, risky action трактуется как `denied`,
+  а не как implicit success.
 
 ## Configuration And Runtime Assumptions
 
@@ -149,12 +230,14 @@ contract, а не как новую перепридуманную модель.
   - `security.public_repo.intake_policy`: `owner-only` | `allowlist`
   - `security.public_repo.issue_author_allowlist`: список логинов
   - `security.network.allow_hosts`: список host allowlist
-  - `security.approval.channel = agent-session`
-  - `security.approval.audit_log = true`
+  - `security.approval.channel`: `agent-session`
+  - `security.approval.audit_log`: `true`
 - enforcement нельзя сводить только к системному prompt или дисциплине модели;
 - текущие launcher defaults, документированные вне этой issue, являются
   pre-security-baseline состоянием и должны быть приведены в соответствие с
   approval contract для `public-safe` режима;
+- до обновления launcher defaults implementation `public-safe mode` должен
+  иметь приоритет над legacy `--ask-for-approval never` path;
 - проверки, затрагивающие `zellij`, допустимы только в headless path и не
   должны использовать host `zellij` пользователя.
 

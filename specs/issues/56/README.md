@@ -18,9 +18,18 @@ Issue требует не локальной правки, а отдельног
 сценария `public repo -> GitHub content/repo content/runtime outputs ->
 ai-teamlead -> local machine`.
 
-Этот issue-level пакет является feature-spec по security baseline. Формулировка
-`Security review` относится к типу исследовательской задачи, а результатом
-должен быть именно implementation-ready feature contract для runtime.
+Этот пакет является issue-level implementation handoff поверх уже существующих
+канонических документов:
+
+- feature `0006-public-repo-security`;
+- SSOT [../../../docs/untrusted-input-security.md](../../../docs/untrusted-input-security.md);
+- ADR `0029` и `0030`.
+
+Формулировка `Security review` относится к типу исследовательской задачи, но
+результатом этого issue должен быть именно task-specific implementation contract
+для runtime. Канонический feature-level слой остается в `docs/features/0006-*`,
+а `specs/issues/56/*` конкретизирует runtime rollout и verification для issue
+`#56`.
 
 Ключевой результат анализа:
 
@@ -92,17 +101,24 @@ implementation plan, который связывает security contract с roll
 - выровнять runtime enforcement, project-local prompts, launcher и диагностику
   под единый security contract.
 
-## Open Questions
+## Contract Status
 
-Блокирующих вопросов по текущему issue не выявлено.
+Issue-level пакет считается implementation-ready, потому что для текущего scope
+уже зафиксированы временные operational contracts:
 
-Неблокирующие решения, которые должны быть зафиксированы по ходу реализации:
+- source of truth для runtime security contract:
+  SSOT `untrusted-input-security` + ADR `0029/0030` + этот issue-level handoff;
+- `repo_visibility` fallback:
+  GitHub visibility metadata -> локальная repo metadata -> `unknown`;
+- self-hosted trust boundary:
+  локальный contract layer установленного `ai-teamlead` trusted только как
+  launcher/control plane до чтения task inputs; repo-local content target
+  задачи после входа в task input остается hostile-by-default;
+- MVP approval contract:
+  approval только через agent session, one-shot, action-bound, session-bound.
 
-- где хранить каноническую config schema для security policy до отдельного
-  config ADR;
-- как именно runtime определяет `repo_visibility` и какой fallback используется
-  при частичной недоступности GitHub metadata;
-- насколько глубоко нужно ограничивать repo-local assets в `public-safe`
-  режиме на первом implementation этапе;
-- нужен ли после MVP дополнительный trusted approval mechanism сверх agent
-  session.
+Неблокирующие follow-up вопросы, которые не блокируют implementation этой issue:
+
+- вынос полной security config schema в отдельный config ADR;
+- возможный additional trusted approval mechanism сверх agent session;
+- дальнейшее ужесточение repo-local assets в self-hosted/dogfooding path.

@@ -32,7 +32,7 @@ permission gates и verification появились в runtime как согла
 ## Связанные документы
 
 - Issue: https://github.com/dapi/ai-teamlead/issues/56
-- Feature / issue spec:
+- Issue spec:
   - [README.md](./README.md)
   - [01-what-we-build.md](./01-what-we-build.md)
   - [02-how-we-build.md](./02-how-we-build.md)
@@ -79,6 +79,8 @@ permission gates и verification появились в runtime как согла
   paths;
 - current launcher defaults и repo-level config docs еще не выровнены с
   целевым approval contract этой feature;
+- self-hosted/dogfooding path требует явного trust-priority rule между local
+  bootstrap assets и hostile task inputs;
 - проверки для `zellij`-связанных сценариев должны идти только в headless path;
 - public repo support нельзя считать production-ready до появления хотя бы
   минимального runtime enforcement.
@@ -105,6 +107,8 @@ permission gates и verification появились в runtime как согла
 - runtime умеет определять `repo_visibility`;
 - `public` и `unknown` visibility приводят к `public-safe`;
 - зафиксированы правила `poll` vs explicit `run`, включая `manual-override`;
+- зафиксированы owner resolution, missing metadata behavior и self-hosted trust
+  priority rule;
 - diagnostics показывают выбранный `operating_mode`.
 
 Проверка:
@@ -129,6 +133,7 @@ permission gates и verification появились в runtime как согла
 
 - approval в MVP может приходить только из agent session;
 - approval привязывается к `session_uuid`, `action_kind` и target;
+- approval lifecycle зафиксирован для reuse, expiration и restart/re-run;
 - policy-матрица `allow`/`approval`/`deny` зафиксирована для `filesystem`,
   `network`, `execution`, `publication`.
 
@@ -157,6 +162,7 @@ permission gates и verification появились в runtime как согла
 - dangerous execution, access вне repo/worktree и публикация потенциально
   чувствительных данных либо требуют approval, либо запрещаются;
 - publication path различает канонический GitHub workflow и внешние uploads;
+- verification покрывает linked PR/issues, linked artifacts и external content;
 - diagnostics объясняют причину deny/approval без утечки секретов.
 
 Проверка:
@@ -202,6 +208,8 @@ permission gates и verification появились в runtime как согла
 - explicit `run` вне intake policy работает только как `manual-override` без
   trust upgrade;
 - approval в MVP приходит только из agent session и логируется в audit trail;
+- approval lifecycle и self-hosted trust priority не оставляют неоднозначности
+  для restart/re-run и dogfooding path;
 - high-risk actions проходят через enforce-able permission gates;
 - operator получает понятную диагностику причин deny/approval;
 - docs, prompts, config surface и tests синхронизированы с runtime behavior.
