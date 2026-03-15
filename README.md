@@ -74,6 +74,7 @@
 - [docs/config.md](./docs/config.md)
 - [docs/documentation-structure.md](./docs/documentation-structure.md)
 - [docs/documentation-process.md](./docs/documentation-process.md)
+- [docs/terminology.md](./docs/terminology.md)
 - [docs/implementation-plan.md](./docs/implementation-plan.md)
 - [docs/templates/feature-spec-template.md](./docs/templates/feature-spec-template.md)
 - [docs/templates/implementation-plan-template.md](./docs/templates/implementation-plan-template.md)
