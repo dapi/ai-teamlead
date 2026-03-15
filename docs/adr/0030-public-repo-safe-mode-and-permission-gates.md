@@ -1,4 +1,4 @@
-# ADR-0028: public repo safe mode and permission gates
+# ADR-0030: public repo safe mode and permission gates
 
 Статус: proposed
 Дата: 2026-03-14
@@ -101,7 +101,7 @@ issue не решает риск prompt injection внутри discussion thread
 
 - [../untrusted-input-security.md](../untrusted-input-security.md)
 - [../features/0006-public-repo-security/README.md](../features/0006-public-repo-security/README.md)
-- [./0027-untrusted-github-content-as-hostile-input.md](./0027-untrusted-github-content-as-hostile-input.md)
+- [./0029-untrusted-github-content-as-hostile-input.md](./0029-untrusted-github-content-as-hostile-input.md)
 
 ## Журнал изменений
 

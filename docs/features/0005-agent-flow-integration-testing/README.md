@@ -41,7 +41,7 @@ flow end-to-end.
 
 ## Зависимости
 
-- [Feature 0001](../0001-ai-teamlead-daemon/README.md) — основной CLI и runtime
+- [Feature 0001](../0001-ai-teamlead-cli/README.md) — основной CLI и runtime
   orchestration
 - [Feature 0002](../0002-repo-init/README.md) — repo-local assets и
   `settings.yml`

@@ -51,7 +51,7 @@ agent flow для feature `0005`.
 - Code quality:
   - [../../code-quality.md](../../code-quality.md)
 - Зависимые планы или фичи:
-  - [../0001-ai-teamlead-daemon/README.md](../0001-ai-teamlead-daemon/README.md)
+  - [../0001-ai-teamlead-cli/README.md](../0001-ai-teamlead-cli/README.md)
   - [../0002-repo-init/README.md](../0002-repo-init/README.md)
   - [../0003-agent-launch-orchestration/README.md](../0003-agent-launch-orchestration/README.md)
   - [../0003-agent-launch-orchestration/04-implementation-plan.md](../0003-agent-launch-orchestration/04-implementation-plan.md)

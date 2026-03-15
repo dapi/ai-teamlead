@@ -338,6 +338,8 @@ TUI/CLI-контрола или формализованных action-кнопо
   смены статуса
 - если смена статуса не удалась, session должна оставаться `active`
 
+Спецификация: [ADR-0020](adr/0020-agent-session-completion-signal.md).
+
 ## Versioned analysis-артефакты
 
 Результат анализа должен быть сохранен как versioned SDD-комплект в каталоге:
@@ -792,26 +794,6 @@ Issue должна переводиться в `Analysis Blocked`, если:
 - точный шаблон вопросов на уточнение
 - точный шаблон финального пакета анализа
 - нужно ли вводить явные текстовые команды для оператора уже в первой версии
-## Контракт завершения стадии
-
-Agent session сигналит core о результате анализа через CLI-команду:
-
-```
-ai-teamlead internal complete-stage <session_uuid> --outcome <outcome> --message <msg>
-```
-
-Допустимые значения `outcome`:
-
-- `plan-ready` — SDD-комплект собран, issue → `Waiting for Plan Review`
-- `needs-clarification` — нужны ответы, issue → `Waiting for Clarification`
-- `blocked` — технический блокер, issue → `Analysis Blocked`
-
-Команда инкапсулирует: git add/commit, git push, draft PR (для plan-ready),
-смену статуса в GitHub Project, обновление session.json.
-
-Агент НЕ выполняет git/gh операции самостоятельно.
-
-Спецификация: ADR-0020, `docs/adr/0020-agent-session-completion-signal.md`.
 
 ## Связанные документы
 

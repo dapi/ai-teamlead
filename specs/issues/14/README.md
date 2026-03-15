@@ -52,7 +52,7 @@ issue `#11` до ее реализации.
 - [../../../docs/adr/0001-repo-local-ai-config.md](../../../docs/adr/0001-repo-local-ai-config.md)
 - [../../../docs/adr/0009-deterministic-backlog-ordering.md](../../../docs/adr/0009-deterministic-backlog-ordering.md)
 - [../../../docs/adr/0021-cli-contract-poll-run-loop.md](../../../docs/adr/0021-cli-contract-poll-run-loop.md)
-- [../../../docs/adr/0027-zero-config-settings-template-and-runtime-default-layer.md](../../../docs/adr/0027-zero-config-settings-template-and-runtime-default-layer.md)
+- [../../../docs/adr/0033-zero-config-settings-template-and-runtime-default-layer.md](../../../docs/adr/0033-zero-config-settings-template-and-runtime-default-layer.md)
 - https://github.com/dapi/ai-teamlead/issues/11
 
 ## Open Questions

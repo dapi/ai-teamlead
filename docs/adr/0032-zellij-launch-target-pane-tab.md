@@ -1,4 +1,4 @@
-# ADR-0028: `zellij.launch_target` и CLI override для `pane` / `tab`
+# ADR-0032: `zellij.launch_target` и CLI override для `pane` / `tab`
 
 Статус: accepted
 Дата: 2026-03-15
@@ -71,7 +71,7 @@ zellij:
 ## Связанные документы
 
 - [ADR-0023](./0023-zellij-session-target-resolution.md)
-- [ADR-0027](./0027-zellij-issue-aware-tab-name-template.md)
+- [ADR-0031](./0031-zellij-issue-aware-tab-name-template.md)
 - [Feature 0003](../features/0003-agent-launch-orchestration/README.md)
 - [Issue Analysis Flow](../issue-analysis-flow.md)
 - [specs/issues/47/README.md](../../specs/issues/47/README.md)

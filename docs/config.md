@@ -58,6 +58,7 @@ Bootstrap overview:
 #     waiting_for_ci: "Waiting for CI"
 #     waiting_for_code_review: "Waiting for Code Review"
 #     implementation_blocked: "Implementation Blocked"
+#     done: "Done"
 #
 # runtime:
 #   max_parallel: 1
@@ -195,4 +196,4 @@ repo-local runtime-артефактах внутри `.git/.ai-teamlead/`.
 - [./features/0001-ai-teamlead-cli/README.md](./features/0001-ai-teamlead-cli/README.md)
 - [./features/0003-agent-launch-orchestration/README.md](./features/0003-agent-launch-orchestration/README.md)
 - [./adr/0001-repo-local-ai-config.md](./adr/0001-repo-local-ai-config.md)
-- [./adr/0028-zellij-launch-target-pane-tab.md](./adr/0028-zellij-launch-target-pane-tab.md)
+- [./adr/0032-zellij-launch-target-pane-tab.md](./adr/0032-zellij-launch-target-pane-tab.md)

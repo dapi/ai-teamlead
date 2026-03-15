@@ -1,4 +1,4 @@
-# ADR-0027: zero-config `settings.yml` как documented template и canonical runtime defaults
+# ADR-0033: zero-config `settings.yml` как documented template и canonical runtime defaults
 
 Статус: accepted
 Дата: 2026-03-14
