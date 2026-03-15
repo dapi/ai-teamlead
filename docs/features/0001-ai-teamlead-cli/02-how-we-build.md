@@ -106,7 +106,7 @@ bootstrap `settings.yml` допускается как comment-only template с
   используется как fallback после CLI override и `ZELLIJ_SESSION_NAME`
 - `tab_name` это стабильный project-local идентификатор для orchestration
 - `launch_target` задает launcher mode внутри выбранной session:
-  `pane` по runtime default или `tab` при явном override
+  `tab` по runtime default или `pane` при явном override
 - analysis/implementation statuses, `runtime.*`, `zellij.*` и
   `launch_agent.*` относятся к `defaulted-by-application`
 - `zellij.layout` остается `example-only extension`: template показывает

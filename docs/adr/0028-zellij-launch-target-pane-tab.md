@@ -26,7 +26,7 @@
 
 ```yaml
 zellij:
-  launch_target: "pane"
+  launch_target: "tab"
 ```
 
 Поддерживаются только значения:
@@ -36,11 +36,11 @@ zellij:
 
 Правила:
 
-1. runtime default при отсутствии поля = `pane`;
+1. runtime default при отсутствии поля = `tab`;
 2. public CLI override добавляется только для `run`:
    `ai-teamlead run <issue> --launch-target <pane|tab>`;
 3. precedence order фиксируется как:
-   `run --launch-target` -> `zellij.launch_target` -> runtime default `pane`;
+   `run --launch-target` -> `zellij.launch_target` -> runtime default `tab`;
 4. `poll` и `loop` остаются config-driven и не получают отдельный public
    `--launch-target` override;
 5. `pane`-режим использует stable shared tab `zellij.tab_name`:
@@ -81,6 +81,6 @@ zellij:
 ### 2026-03-15
 
 - добавлен config contract `zellij.launch_target`
-- зафиксирован runtime default `pane`
+- зафиксирован runtime default `tab`
 - добавлен public CLI override `run --launch-target`
 - зафиксировано решение не добавлять public override в `poll` и `loop`

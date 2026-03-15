@@ -183,7 +183,7 @@ Poller или ручной запуск выбирает одну подходя
 - target `zellij` session определяется в порядке:
   `--zellij-session` -> `ZELLIJ_SESSION_NAME` -> `zellij.session_name`
 - effective launch target для `run` определяется в порядке:
-  `--launch-target` -> `zellij.launch_target` -> runtime default `pane`
+  `--launch-target` -> `zellij.launch_target` -> runtime default `tab`
 - `poll` и `loop` не имеют отдельного public `--launch-target` override и
   используют только config/default path
 - `zellij.tab_name` задает stable shared tab для `pane`-режима

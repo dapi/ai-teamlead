@@ -4,6 +4,9 @@ set -euo pipefail
 REPO_ROOT="$(mktemp -d /tmp/ai-teamlead-launch-target-duplicate-XXXXXX)"
 create_test_repo "$REPO_ROOT"
 
+sed -i 's/^  launch_target: "tab"$/  launch_target: "pane"/' \
+    "$REPO_ROOT/.ai-teamlead/settings.yml"
+
 AI_TEAMLEAD_BIN="/test/bin/ai-teamlead"
 
 (

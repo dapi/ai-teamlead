@@ -19,7 +19,7 @@ run_override_scenario() {
 {"data":{"node":{"id":"PVT_test_project","title":"Test Project","field":{"id":"STATUS_FIELD","options":[{"id":"OPT_BACKLOG","name":"Backlog"},{"id":"OPT_ANALYSIS","name":"Analysis In Progress"},{"id":"OPT_CLARIFY","name":"Waiting for Clarification"},{"id":"OPT_PLAN","name":"Waiting for Plan Review"},{"id":"OPT_READY","name":"Ready for Implementation"},{"id":"OPT_BLOCKED","name":"Analysis Blocked"}]},"items":{"nodes":[{"id":"ITEM-42","fieldValueByName":{"name":"Backlog","optionId":"OPT_BACKLOG"},"content":{"number":42,"state":"OPEN","repository":{"name":"example","owner":{"login":"dapi"}}}}]}}}}
 EOF
 
-    sed -i "s/^  launch_target: \"pane\"$/  launch_target: \"$settings_target\"/" "$settings_file"
+    sed -i "s/^  launch_target: \".*\"$/  launch_target: \"$settings_target\"/" "$settings_file"
     sed -i '/^  tab_name: "issue-analysis"$/a\  tab_name_template: "#${ISSUE_NUMBER}"' "$settings_file"
 
     install_gh_stub "$stub_bin" "$gh_snapshot" "$gh_log"

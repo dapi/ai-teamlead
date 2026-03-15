@@ -4,8 +4,6 @@ set -euo pipefail
 REPO_ROOT="$(mktemp -d /tmp/ai-teamlead-launch-target-tab-XXXXXX)"
 create_test_repo "$REPO_ROOT"
 
-sed -i 's/^  launch_target: "pane"$/  launch_target: "tab"/' \
-    "$REPO_ROOT/.ai-teamlead/settings.yml"
 sed -i '/^  launch_target: "tab"$/a\  tab_name_template: "#${ISSUE_NUMBER}"' \
     "$REPO_ROOT/.ai-teamlead/settings.yml"
 

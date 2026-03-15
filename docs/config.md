@@ -66,7 +66,7 @@ Bootstrap overview:
 # zellij:
 #   session_name: "${REPO}"
 #   tab_name: "issue-analysis"
-#   launch_target: "pane"
+#   launch_target: "tab"
 #   tab_name_template: "#${ISSUE_NUMBER}"
 #   layout: "compact"
 #
@@ -106,11 +106,11 @@ Bootstrap overview:
 Правила:
 
 - поддерживаются только `pane` и `tab`
-- runtime default при отсутствии поля = `pane`
+- runtime default при отсутствии поля = `tab`
 - public CLI override есть только у `run`:
   `--launch-target <pane|tab>`
 - precedence:
-  `run --launch-target` -> `zellij.launch_target` -> runtime default `pane`
+  `run --launch-target` -> `zellij.launch_target` -> runtime default `tab`
 - `poll` и `loop` остаются config-driven и не имеют public override
 
 Семантика:

@@ -279,8 +279,8 @@ impl Default for RuntimeConfig {
 #[serde(rename_all = "lowercase")]
 #[value(rename_all = "lowercase")]
 pub enum LaunchTarget {
-    #[default]
     Pane,
+    #[default]
     Tab,
 }
 
@@ -429,7 +429,7 @@ fn default_zellij_tab_name() -> String {
 }
 
 fn default_zellij_launch_target() -> LaunchTarget {
-    LaunchTarget::Pane
+    LaunchTarget::Tab
 }
 
 fn default_zellij_layout() -> Option<String> {
@@ -608,8 +608,8 @@ mod tests {
         FieldContract {
             key: "zellij.launch_target",
             kind: FieldKind::DefaultedByApplication,
-            runtime_default: Some("pane"),
-            template_line: "#   launch_target: \"pane\"",
+            runtime_default: Some("tab"),
+            template_line: "#   launch_target: \"tab\"",
         },
         FieldContract {
             key: "zellij.tab_name_template",
@@ -885,7 +885,7 @@ github:
         assert_eq!(config.runtime.poll_interval_seconds, 3600);
         assert_eq!(config.zellij.session_name, "${REPO}");
         assert_eq!(config.zellij.tab_name, "issue-analysis");
-        assert_eq!(config.zellij.launch_target, LaunchTarget::Pane);
+        assert_eq!(config.zellij.launch_target, LaunchTarget::Tab);
         assert_eq!(config.zellij.tab_name_template, None);
         assert_eq!(config.zellij.layout, None);
         assert_eq!(
@@ -931,7 +931,7 @@ zellij:
         assert_eq!(config.runtime.poll_interval_seconds, 60);
         assert_eq!(config.zellij.session_name, "custom-session");
         assert_eq!(config.zellij.tab_name, "issue-analysis");
-        assert_eq!(config.zellij.launch_target, LaunchTarget::Pane);
+        assert_eq!(config.zellij.launch_target, LaunchTarget::Tab);
         assert_eq!(config.zellij.tab_name_template, None);
         assert_eq!(config.zellij.layout, None);
         assert_eq!(
@@ -969,11 +969,11 @@ zellij:
     }
 
     #[test]
-    fn parses_config_without_launch_target_as_runtime_default_pane() {
+    fn parses_config_without_launch_target_as_runtime_default_tab() {
         let yaml = sample_config().replace("  launch_target: \"tab\"\n", "");
         let path = PathBuf::from("/tmp/.ai-teamlead/settings.yml");
         let config = Config::load_from_str(&yaml, &path).expect("yaml should parse");
-        assert_eq!(config.zellij.launch_target, LaunchTarget::Pane);
+        assert_eq!(config.zellij.launch_target, LaunchTarget::Tab);
     }
 
     #[test]
