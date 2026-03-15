@@ -240,7 +240,10 @@ launch_agent:
       - "--permission-mode"
       - "auto"
     codex:
-      - "--full-auto"
+      - "--ask-for-approval"
+      - "never"
+      - "--sandbox"
+      - "workspace-write"
 ```
 
 Во время запуска `session_name` рендерится тем же template path, что и
@@ -273,11 +276,12 @@ launch_agent:
 - значения задаются как список строк, а не как одна shell-строка;
 - отсутствие пользовательского override означает application defaults;
 - canonical defaults:
-  - `codex`: `["--full-auto"]`
+  - `codex`: `["--ask-for-approval", "never", "--sandbox", "workspace-write"]`
   - `claude`: `["--permission-mode", "auto"]`
 - более агрессивные значения, например
-  `["--dangerously-skip-permissions"]` для `claude`, считаются opt-in
-  override и не входят в default-layer
+  `["--dangerously-skip-permissions"]` для `claude` или
+  `["--dangerously-bypass-approvals-and-sandbox"]` для `codex`, считаются
+  opt-in override и не входят в default-layer
 
 ## Ограничение минимального generated layout
 

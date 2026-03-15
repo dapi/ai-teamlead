@@ -96,7 +96,10 @@ fi
 
 if grep -Fq '#   global_args:' "$SETTINGS_FILE" && \
    grep -Fq '#       - "--permission-mode"' "$SETTINGS_FILE" && \
-   grep -Fq '#       - "--full-auto"' "$SETTINGS_FILE"; then
+   grep -Fq '#       - "--ask-for-approval"' "$SETTINGS_FILE" && \
+   grep -Fq '#       - "never"' "$SETTINGS_FILE" && \
+   grep -Fq '#       - "--sandbox"' "$SETTINGS_FILE" && \
+   grep -Fq '#       - "workspace-write"' "$SETTINGS_FILE"; then
     echo "  PASS: init documents canonical agent global args defaults"
     ((PASS++)) || true
 else

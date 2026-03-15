@@ -1140,6 +1140,9 @@ printf 'docker\n' > /artifacts/sandbox-runtime.txt
                     script.push_str("    --full-auto)\n");
                     script.push_str("      shift\n");
                     script.push_str("      ;;\n");
+                    script.push_str("    --ask-for-approval|--sandbox)\n");
+                    script.push_str("      shift 2\n");
+                    script.push_str("      ;;\n");
                     script.push_str("    *)\n");
                     script.push_str("      if [[ $# -eq 1 ]]; then\n");
                     script.push_str("        prompt=\"$1\"\n");

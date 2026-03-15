@@ -1,2 +1,10 @@
 github:
   project_id: "PVT_kwHNeaPOAUaljg"
+
+launch_agent:
+  global_args:
+    codex:
+      - "--ask-for-approval"
+      - "never"
+      - "--sandbox"
+      - "workspace-write"

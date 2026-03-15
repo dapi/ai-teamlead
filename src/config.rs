@@ -453,7 +453,12 @@ fn default_claude_global_args() -> Vec<String> {
 }
 
 fn default_codex_global_args() -> Vec<String> {
-    vec!["--full-auto".into()]
+    vec![
+        "--ask-for-approval".into(),
+        "never".into(),
+        "--sandbox".into(),
+        "workspace-write".into(),
+    ]
 }
 
 fn default_implementation_branch_template() -> String {
@@ -502,7 +507,7 @@ mod tests {
     }
 
     const SETTINGS_TEMPLATE: &str = include_str!("../templates/init/settings.yml");
-    const FIELD_CONTRACTS: [FieldContract; 29] = [
+    const FIELD_CONTRACTS: [FieldContract; 32] = [
         FieldContract {
             key: "github.project_id",
             kind: FieldKind::RequiredWithoutDefault,
@@ -656,8 +661,26 @@ mod tests {
         FieldContract {
             key: "launch_agent.global_args.codex[0]",
             kind: FieldKind::DefaultedByApplication,
-            runtime_default: Some("--full-auto"),
-            template_line: "#       - \"--full-auto\"",
+            runtime_default: Some("--ask-for-approval"),
+            template_line: "#       - \"--ask-for-approval\"",
+        },
+        FieldContract {
+            key: "launch_agent.global_args.codex[1]",
+            kind: FieldKind::DefaultedByApplication,
+            runtime_default: Some("never"),
+            template_line: "#       - \"never\"",
+        },
+        FieldContract {
+            key: "launch_agent.global_args.codex[2]",
+            kind: FieldKind::DefaultedByApplication,
+            runtime_default: Some("--sandbox"),
+            template_line: "#       - \"--sandbox\"",
+        },
+        FieldContract {
+            key: "launch_agent.global_args.codex[3]",
+            kind: FieldKind::DefaultedByApplication,
+            runtime_default: Some("workspace-write"),
+            template_line: "#       - \"workspace-write\"",
         },
         FieldContract {
             key: "launch_agent.implementation_branch_template",
@@ -722,7 +745,10 @@ launch_agent:
       - "--permission-mode"
       - "auto"
     codex:
-      - "--full-auto"
+      - "--ask-for-approval"
+      - "never"
+      - "--sandbox"
+      - "workspace-write"
   implementation_branch_template: "implementation/issue-${ISSUE_NUMBER}"
   implementation_worktree_root_template: "${HOME}/worktrees/${REPO}/${BRANCH}"
   implementation_artifacts_dir_template: "specs/issues/${ISSUE_NUMBER}"
@@ -807,7 +833,12 @@ launch_agent:
         assert_eq!(config.zellij.layout.as_deref(), Some("custom-layout"));
         assert_eq!(
             config.launch_agent.global_args.codex,
-            vec!["--full-auto".to_string()]
+            vec![
+                "--ask-for-approval".to_string(),
+                "never".to_string(),
+                "--sandbox".to_string(),
+                "workspace-write".to_string(),
+            ]
         );
         assert_eq!(
             config.launch_agent.global_args.claude,
@@ -865,7 +896,12 @@ launch_agent:
         assert_eq!(config.zellij.layout, None);
         assert_eq!(
             config.launch_agent.global_args.codex,
-            vec!["--full-auto".to_string()]
+            vec![
+                "--ask-for-approval".to_string(),
+                "never".to_string(),
+                "--sandbox".to_string(),
+                "workspace-write".to_string(),
+            ]
         );
         assert_eq!(
             config.launch_agent.global_args.claude,
@@ -898,7 +934,12 @@ github:
         );
         assert_eq!(
             config.launch_agent.global_args.codex,
-            vec!["--full-auto".to_string()]
+            vec![
+                "--ask-for-approval".to_string(),
+                "never".to_string(),
+                "--sandbox".to_string(),
+                "workspace-write".to_string(),
+            ]
         );
     }
 
@@ -936,14 +977,19 @@ zellij:
         assert_eq!(config.zellij.layout, None);
         assert_eq!(
             config.launch_agent.global_args.codex,
-            vec!["--full-auto".to_string()]
+            vec![
+                "--ask-for-approval".to_string(),
+                "never".to_string(),
+                "--sandbox".to_string(),
+                "workspace-write".to_string(),
+            ]
         );
     }
 
     #[test]
     fn allows_overriding_agent_global_args() {
         let yaml = sample_config().replace(
-            "  global_args:\n    claude:\n      - \"--permission-mode\"\n      - \"auto\"\n    codex:\n      - \"--full-auto\"\n",
+            "  global_args:\n    claude:\n      - \"--permission-mode\"\n      - \"auto\"\n    codex:\n      - \"--ask-for-approval\"\n      - \"never\"\n      - \"--sandbox\"\n      - \"workspace-write\"\n",
             "  global_args:\n    claude:\n      - \"--dangerously-skip-permissions\"\n    codex:\n      - \"--sandbox\"\n      - \"workspace-write\"\n",
         );
         let path = PathBuf::from("/tmp/.ai-teamlead/settings.yml");
@@ -1053,7 +1099,7 @@ zellij:
 
     #[test]
     fn rejects_blank_global_args() {
-        let yaml = sample_config().replace("\"--full-auto\"", "\"   \"");
+        let yaml = sample_config().replace("\"--ask-for-approval\"", "\"   \"");
         let path = PathBuf::from("/tmp/.ai-teamlead/settings.yml");
         let error = Config::load_from_str(&yaml, &path).expect_err("validation should fail");
         assert!(

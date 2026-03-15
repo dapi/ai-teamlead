@@ -80,11 +80,11 @@ EOF
     assert_file_exists "$stub_out/codex.invoked" "codex override scenario invoked codex"
     assert_file_contains "$stub_out/codex.args" "--sandbox" "codex override scenario passes custom flag"
     assert_file_contains "$stub_out/codex.args" "workspace-write" "codex override scenario passes custom value"
-    if [[ -f "$stub_out/codex.args" ]] && grep -Fxq -- "--full-auto" "$stub_out/codex.args"; then
-        echo "  FAIL: codex override scenario must not keep default --full-auto"
+    if [[ -f "$stub_out/codex.args" ]] && grep -Fxq -- "--ask-for-approval" "$stub_out/codex.args"; then
+        echo "  FAIL: codex override scenario must not keep default approval args"
         ((FAIL++)) || true
     else
-        echo "  PASS: codex override scenario replaces default --full-auto"
+        echo "  PASS: codex override scenario replaces default approval args"
         ((PASS++)) || true
     fi
 }
@@ -136,7 +136,10 @@ launch_agent:
     claude:
       - "--dangerously-skip-permissions"
     codex:
-      - "--full-auto"
+      - "--ask-for-approval"
+      - "never"
+      - "--sandbox"
+      - "workspace-write"
   implementation_branch_template: "implementation/issue-\${ISSUE_NUMBER}"
   implementation_worktree_root_template: "${worktree_base}/\${BRANCH}"
   implementation_artifacts_dir_template: "specs/issues/\${ISSUE_NUMBER}"
@@ -222,7 +225,10 @@ launch_agent:
       - "--permission-mode"
       - "auto"
     codex:
-      - "--full-auto"
+      - "--ask-for-approval"
+      - "never"
+      - "--sandbox"
+      - "workspace-write"
   implementation_branch_template: "implementation/issue-\${ISSUE_NUMBER}"
   implementation_worktree_root_template: "${worktree_base}/\${BRANCH}"
   implementation_artifacts_dir_template: "specs/issues/\${ISSUE_NUMBER}"
@@ -285,7 +291,7 @@ BRANCH='analysis/issue-42'
 WORKTREE_ROOT='${repo_root}/.tmp/analysis-issue-42'
 ARTIFACTS_DIR='specs/issues/42'
 CLAUDE_GLOBAL_ARGS=('--permission-mode' 'auto')
-CODEX_GLOBAL_ARGS=('--full-auto')
+CODEX_GLOBAL_ARGS=('--ask-for-approval' 'never' '--sandbox' 'workspace-write')
 CTX
   exit 0
 fi

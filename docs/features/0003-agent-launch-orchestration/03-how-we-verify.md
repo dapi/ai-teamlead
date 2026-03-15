@@ -163,7 +163,7 @@ Feature считается готовой, если:
 
 - `run` или `poll` запускает analysis stage
 - repo не задает override для `launch_agent.global_args.codex`
-- `codex` получает `--full-auto`
+- `codex` получает `--ask-for-approval never --sandbox workspace-write`
 
 ### Сценарий 13. Canonical `claude` defaults
 
@@ -175,7 +175,8 @@ Feature считается готовой, если:
 
 - repo задает `launch_agent.global_args.codex`
 - launcher использует пользовательский список args
-- canonical default `--full-auto` не дублируется поверх override
+- canonical default `--ask-for-approval never --sandbox workspace-write` не
+  дублируется поверх override
 
 ## Диагностика и наблюдаемость
 

@@ -1319,7 +1319,12 @@ mod launch_agent_tests {
             worktree_root: worktree,
             artifacts_dir: artifacts,
             claude_global_args: vec!["--permission-mode".into(), "auto".into()],
-            codex_global_args: vec!["--full-auto".into()],
+            codex_global_args: vec![
+                "--ask-for-approval".into(),
+                "never".into(),
+                "--sandbox".into(),
+                "workspace-write".into(),
+            ],
         };
 
         assert_eq!(context.branch, "analysis/issue-42");
@@ -1330,7 +1335,7 @@ mod launch_agent_tests {
         assert_eq!(context.artifacts_dir, "specs/issues/42");
         assert_eq!(
             shell_quote_array(&context.codex_global_args),
-            "('--full-auto')"
+            "('--ask-for-approval' 'never' '--sandbox' 'workspace-write')"
         );
     }
 
@@ -1349,7 +1354,15 @@ mod launch_agent_tests {
         let rendered = render_launch_agent_context(&context, &github, 42, FlowStage::Analysis)
             .expect("render launch context");
 
-        assert_eq!(rendered.codex_global_args, vec!["--full-auto".to_string()]);
+        assert_eq!(
+            rendered.codex_global_args,
+            vec![
+                "--ask-for-approval".to_string(),
+                "never".to_string(),
+                "--sandbox".to_string(),
+                "workspace-write".to_string(),
+            ]
+        );
         assert_eq!(
             rendered.claude_global_args,
             vec!["--permission-mode".to_string(), "auto".to_string()]

@@ -80,7 +80,10 @@ Bootstrap overview:
 #       - "--permission-mode"
 #       - "auto"
 #     codex:
-#       - "--full-auto"
+#       - "--ask-for-approval"
+#       - "never"
+#       - "--sandbox"
+#       - "workspace-write"
 #   implementation_branch_template: "implementation/issue-${ISSUE_NUMBER}"
 #   implementation_worktree_root_template: "${HOME}/worktrees/${REPO}/${BRANCH}"
 #   implementation_artifacts_dir_template: "specs/issues/${ISSUE_NUMBER}"
@@ -183,7 +186,7 @@ Bootstrap overview:
 - значения задаются как список строк, а не как raw shell string
 - отсутствие пользовательского override означает application defaults
 - canonical defaults:
-  - `codex`: `["--full-auto"]`
+  - `codex`: `["--ask-for-approval", "never", "--sandbox", "workspace-write"]`
   - `claude`: `["--permission-mode", "auto"]`
 
 ## Выбор агента в runtime
@@ -199,7 +202,7 @@ Bootstrap overview:
 раздельно. При отсутствии пользовательского override применяются application
 defaults:
 
-- `codex`: `["--full-auto"]`
+- `codex`: `["--ask-for-approval", "never", "--sandbox", "workspace-write"]`
 - `claude`: `["--permission-mode", "auto"]`
 
 ## Runtime-последствия
