@@ -75,6 +75,35 @@ SSOT, feature-документы, ADR или соседние разделы.
 
 Каркас для планов реализации: `docs/templates/implementation-plan-template.md`.
 
+## Статусы task-specific документов
+
+Для документации уровня `change/task`, в частности для issue-level
+analysis-артефактов в `specs/issues/${ISSUE_NUMBER}/`, нужно различать два
+разных измерения:
+
+- `Статус` документа;
+- `Статус согласования` analysis-пакета.
+
+Правила:
+
+- `Статус` описывает lifecycle самого документа как task-specific артефакта;
+- `Статус согласования` описывает результат human gate для analysis-пакета;
+- эти поля не должны дублировать друг друга одним и тем же словом
+  `approved`;
+- для issue-level analysis artifacts после human review документ не должен
+  менять `Статус` с `draft` на `approved` только потому, что план принят;
+- approval фиксируется отдельным блоком:
+  `Статус согласования: approved`, `Approved By`, `Approved At`.
+
+Следствие:
+
+- для analysis SDD-комплекта корректная комбинация после human gate:
+  `Статус: draft` + `Статус согласования: approved`;
+- `Статус: approved` сам по себе не должен использоваться как замена
+  approval metadata в issue-level analysis artifacts;
+- если нужен repo-level или stable lifecycle-статус документа, он задается
+  полем `Статус`, но не подменяет собой process gate анализа.
+
 ## Связь с реализацией
 
 Документация должна управлять реализацией, а не объяснять уже случайно

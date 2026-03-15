@@ -110,6 +110,8 @@ Implementation flow может стартовать только если approv
 
 - пакет анализа имеет `Статус согласования: approved`;
 - пакет анализа фиксирует `Approved By` и `Approved At`;
+- поле `Статус` в issue-level analysis artifacts не используется как признак
+  approval и не обязано быть `approved`;
 - если approved artifacts отсутствуют или невалидны, implementation flow
   завершается blocker-исходом, а не продолжает работу по догадкам.
 

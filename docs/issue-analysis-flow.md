@@ -231,6 +231,14 @@ Human gate обязателен в двух местах:
 Если пользователь принимает план, issue переводится в
 `Ready for Implementation`.
 
+При этом versioned analysis artifacts должны обновить approval metadata
+следующим образом:
+
+- `Статус согласования` меняется на `approved`;
+- фиксируются `Approved By` и `Approved At`;
+- `Статус` issue-level analysis документов не должен дублировать human gate и
+  поэтому не обязан меняться с `draft` на `approved`.
+
 После этого дальнейший `run <issue>` должен маршрутизироваться уже в
 implementation flow, а не обратно в analysis flow.
 

@@ -1,6 +1,6 @@
 # Issue 11: Как строим
 
-Статус: approved
+Статус: draft
 Последнее обновление: 2026-03-15
 Статус согласования: approved
 Approved By: dapi
