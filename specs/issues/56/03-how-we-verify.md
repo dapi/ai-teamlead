@@ -35,6 +35,8 @@
 - issue author и comment author рассматриваются независимо;
 - explicit approval относится к конкретному risky action, а не к произвольному
   будущему поведению сессии;
+- explicit approval может приходить только из trusted operator channel, а не из
+  issue, comment, repo-local docs или runtime output;
 - публикация наружу не должна включать локальные чувствительные данные без
   отдельного осознанного operator approval.
 
@@ -46,6 +48,8 @@ Unit tests:
   `private` и `unknown`;
 - intake policy покрыта кейсами `owner-only`, `allowlist`, `open-intake`;
 - policy не повышает trust comments только из-за owner-authored issue;
+- policy не принимает issue/comments/repo-local docs/runtime output как
+  допустимый источник `approval_state = granted`;
 - classification risky actions покрыта для filesystem, network, execution и
   publication paths;
 - diagnostics формируют понятную причину block/approval без вывода секретов.
@@ -81,6 +85,8 @@ Manual validation:
 - review operator-visible diagnostics для deny/approval paths;
 - review логики publication gate на отсутствие локальных секретов в
   issue/PR/comments output;
+- review trusted approval path и убедиться, что approval приходит только из
+  agent session или другого явно выделенного trusted mechanism;
 - review project-local prompts и launcher context на различение
   `operator intent` и `content suggestion`.
 

@@ -34,6 +34,9 @@ ai-teamlead -> local machine`.
 
 ## Артефакты
 
+Issue-level пакет состоит из трех обязательных осей и отдельного
+implementation plan, который связывает security contract с rollout в runtime.
+
 ## Что строим
 
 - [01-what-we-build.md](./01-what-we-build.md)

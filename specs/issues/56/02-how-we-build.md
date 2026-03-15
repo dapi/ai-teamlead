@@ -64,6 +64,10 @@ contract, а не как новую перепридуманную модель.
   привилегий;
 - `approval_state = granted` относится к конкретному действию, а не к
   неограниченному сеансу целиком.
+- `approval_state = granted` может появиться только из trusted operator channel,
+  например явного ответа в agent session или другого отдельного trusted
+  mechanism; issue body, comments, repo-local docs и runtime output не могут
+  выступать источником approval.
 
 Ключевые интерфейсы:
 
@@ -74,6 +78,8 @@ contract, а не как новую перепридуманную модель.
 - shell execution layer, который должен различать обычное исполнение и
   dangerous execution;
 - publication path, который должен учитывать риск data exfiltration;
+- trusted operator channel, через который runtime получает explicit approval для
+  конкретного high-risk action;
 - project-local prompts и launcher context, которые не должны трактовать
   hostile content как trusted instruction.
 
