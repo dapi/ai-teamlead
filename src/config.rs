@@ -60,6 +60,13 @@ impl Config {
             "zellij.tab_name must not be empty in {}",
             path.display()
         );
+        if let Some(tab_name_template) = &self.zellij.tab_name_template {
+            anyhow::ensure!(
+                !tab_name_template.trim().is_empty(),
+                "zellij.tab_name_template must not be empty in {}",
+                path.display()
+            );
+        }
         if let Some(layout) = &self.zellij.layout {
             anyhow::ensure!(
                 !layout.trim().is_empty(),
@@ -181,6 +188,7 @@ pub struct RuntimeConfig {
 pub struct ZellijConfig {
     pub session_name: String,
     pub tab_name: String,
+    pub tab_name_template: Option<String>,
     pub layout: Option<String>,
 }
 
@@ -215,7 +223,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn sample_config() -> &'static str {
-        r#"
+        r##"
 github:
   project_id: "PVT_kwHNeaPOAUaljg"
 
@@ -243,6 +251,7 @@ runtime:
 zellij:
   session_name: "ai-teamlead"
   tab_name: "issue-analysis"
+  tab_name_template: "#${ISSUE_NUMBER}"
   layout: "custom-layout"
 
 launch_agent:
@@ -252,7 +261,7 @@ launch_agent:
   implementation_branch_template: "implementation/issue-${ISSUE_NUMBER}"
   implementation_worktree_root_template: "${HOME}/worktrees/${REPO}/${BRANCH}"
   implementation_artifacts_dir_template: "specs/issues/${ISSUE_NUMBER}"
-"#
+"##
     }
 
     #[test]
@@ -265,6 +274,10 @@ launch_agent:
         assert_eq!(
             config.launch_agent.worktree_root_template,
             "${HOME}/worktrees/${REPO}/${BRANCH}"
+        );
+        assert_eq!(
+            config.zellij.tab_name_template.as_deref(),
+            Some("#${ISSUE_NUMBER}")
         );
         assert_eq!(config.zellij.layout.as_deref(), Some("custom-layout"));
     }
@@ -329,6 +342,24 @@ launch_agent:
         let config: Config = serde_yaml::from_str(&yaml).expect("yaml should parse");
         config.validate(&path).expect("config should validate");
         assert_eq!(config.zellij.layout, None);
+    }
+
+    #[test]
+    fn parses_config_without_optional_tab_name_template() {
+        let yaml = sample_config().replace("  tab_name_template: \"#${ISSUE_NUMBER}\"\n", "");
+        let path = PathBuf::from("/tmp/.ai-teamlead/settings.yml");
+        let config: Config = serde_yaml::from_str(&yaml).expect("yaml should parse");
+        config.validate(&path).expect("config should validate");
+        assert_eq!(config.zellij.tab_name_template, None);
+    }
+
+    #[test]
+    fn rejects_blank_zellij_tab_name_template() {
+        let yaml = sample_config().replace("#${ISSUE_NUMBER}", "   ");
+        let path = PathBuf::from("/tmp/.ai-teamlead/settings.yml");
+        let config: Config = serde_yaml::from_str(&yaml).expect("yaml should parse");
+        let error = config.validate(&path).expect_err("validation should fail");
+        assert!(error.to_string().contains("zellij.tab_name_template"));
     }
 
     #[test]
