@@ -15,6 +15,7 @@ permission gates и verification появились в runtime как согла
 В план входит:
 
 - visibility и operating-mode resolution для public/private/unknown repos;
+- сохранение `standard` baseline для private repos без undocumented regression;
 - intake policy для auto-start в public repos;
 - approval contract и runtime audit trail;
 - permission gates для filesystem, network, execution и publication actions;
@@ -106,9 +107,13 @@ permission gates и verification появились в runtime как согла
   inputs;
 - runtime умеет определять `repo_visibility`;
 - `public` и `unknown` visibility приводят к `public-safe`;
+- `private` visibility по умолчанию оставляет `standard`, если config не
+  требует `force-public-safe`;
 - зафиксированы правила `poll` vs explicit `run`, включая `manual-override`;
 - зафиксированы owner resolution, missing metadata behavior и self-hosted trust
   priority rule;
+- зафиксирован mapping `eligible/manual-override/skipped/denied` к runtime
+  behavior и flow statuses;
 - diagnostics показывают выбранный `operating_mode`.
 
 Проверка:
@@ -133,6 +138,8 @@ permission gates и verification появились в runtime как согла
 
 - approval в MVP может приходить только из agent session;
 - approval привязывается к `session_uuid`, `action_kind` и target;
+- определен canonical approval handshake, timeout/deny semantics и
+  `target_fingerprint` contract;
 - approval lifecycle зафиксирован для reuse, expiration и restart/re-run;
 - policy-матрица `allow`/`approval`/`deny` зафиксирована для `filesystem`,
   `network`, `execution`, `publication`.
@@ -162,6 +169,7 @@ permission gates и verification появились в runtime как согла
 - dangerous execution, access вне repo/worktree и публикация потенциально
   чувствительных данных либо требуют approval, либо запрещаются;
 - publication path различает канонический GitHub workflow и внешние uploads;
+- внешние publish sinks остаются hard `deny` в MVP;
 - verification покрывает linked PR/issues, linked artifacts и external content;
 - diagnostics объясняют причину deny/approval без утечки секретов.
 
@@ -188,6 +196,8 @@ permission gates и verification появились в runtime как согла
 - project-local prompts явно различают `operator intent` и hostile content;
 - launcher defaults, config docs и runtime messaging не противоречат approval
   contract;
+- missing/malformed security config и legacy flags не могут ослабить
+  `public-safe` baseline;
 - launcher и runtime messaging показывают `public-safe` режим и причину
   блокировок;
 - headless verification покрывает hostile issue, comments, repo-local docs и
@@ -204,12 +214,16 @@ permission gates и verification появились в runtime как согла
 
 - `public-safe` режим детерминированно включается для `public` и `unknown`
   visibility;
+- `private` repos сохраняют `standard` baseline без скрытого изменения текущего
+  workflow, если нет явного override;
 - auto-intake для public repos не стартует hostile issue вне выбранной policy;
 - explicit `run` вне intake policy работает только как `manual-override` без
   trust upgrade;
 - approval в MVP приходит только из agent session и логируется в audit trail;
 - approval lifecycle и self-hosted trust priority не оставляют неоднозначности
   для restart/re-run и dogfooding path;
+- skipped/denied paths однозначно отражаются в diagnostics и корректно мапятся
+  на flow outcome/status;
 - high-risk actions проходят через enforce-able permission gates;
 - operator получает понятную диагностику причин deny/approval;
 - docs, prompts, config surface и tests синхронизированы с runtime behavior.

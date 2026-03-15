@@ -64,19 +64,29 @@ contract, а не как новую перепридуманную модель.
 - `input_trust_class`: `trusted-control`, `semi-trusted-repo`, `untrusted`,
   `sensitive-local`;
 - `approval_state`: `not-required`, `required`, `granted`, `denied`.
+- `action_kind`: `filesystem-read`, `filesystem-write`, `network-open`,
+  `network-download`, `execution-command`, `publication-github`;
 - `approval_record`: `session_uuid`, `issue_number`, `action_kind`,
   `target_fingerprint`, `operator_response`, `granted_at`, `expires_at`.
 
 Минимальные правила обработки:
 
 - `repo_visibility = public` всегда включает `operating_mode = public-safe`;
+- `repo_visibility = private` по умолчанию сохраняет `operating_mode =
+  standard`, если repo-level config явно не требует `force-public-safe`;
 - `repo_visibility = unknown` не может ослаблять ограничения;
 - для `operating_mode = public-safe` допустимы только `owner-only` и
   `allowlist`; `open-intake` разрешен только для `standard` режима;
+- `operating_mode = standard` сохраняет существующий private-repo baseline и не
+  вводит новые public-only intake restrictions без явного config override;
 - `poll` работает только с `intake_decision = eligible`;
 - explicit `run` по issue вне intake policy приводит к
   `intake_decision = manual-override`, но не повышает trust-класс issue
   thread;
+- `intake_decision = skipped` означает, что runner сознательно не берет issue в
+  текущем auto-intake path и не меняет project status;
+- `intake_decision = denied` означает deterministic runtime refusal по security
+  policy или config contract, а не "тихий skip";
 - `input_trust_class = untrusted` не может инициировать собственное повышение
   привилегий;
 - `approval_state = granted` относится к конкретному действию, а не к
@@ -86,6 +96,24 @@ contract, а не как новую перепридуманную модель.
   output не могут выступать источником approval.
 - `approval_record` должен записываться в runtime audit trail и быть привязан к
   конкретному risky action, session и моменту времени.
+
+## Standard Mode Baseline
+
+`repo_visibility = private` и `operating_mode = standard` остаются частью scope
+этой issue, потому что public-repo hardening не должен тихо ломать existing
+private-repo path.
+
+Минимальный baseline для `standard`:
+
+- runtime сохраняет текущую семантику analysis/implementation flow для private
+  repos, если repo-level config не включает `force-public-safe`;
+- public-only intake restrictions (`owner-only`/`allowlist` как mandatory
+  baseline) не навязываются private path молча;
+- existing generic safety invariants остаются в силе и в `standard`: hostile
+  task input не становится approval source, а sensitive local data не считается
+  safe для публикации по умолчанию;
+- verification обязана доказать отсутствие undocumented regression для private
+  repos.
 
 Ключевые интерфейсы:
 
@@ -122,6 +150,14 @@ contract, а не как новую перепридуманную модель.
 - repo-local docs целевого public repo, читаемые как часть задачи, относятся к
   hostile-by-default input и не могут сами менять permission model.
 
+Для self-hosted/dogfooding path действует дополнительное правило:
+
+- если target repo совпадает с локальным repo установленного `ai-teamlead`,
+  только bootstrap assets, загруженные до task binding (`AGENTS.md`, `AURA.md`,
+  `.ai-teamlead/*`, launcher/runtime contract), остаются trusted control plane;
+  те же или соседние repo files, повторно прочитанные уже как task input,
+  считаются hostile-by-default.
+
 `repo_visibility` должен вычисляться по следующему приоритету:
 
 1. каноническая GitHub metadata о visibility репозитория;
@@ -154,6 +190,30 @@ contract, а не как новую перепридуманную модель.
 - issue author влияет только на intake;
 - comment author никогда не дает trust upgrade и не участвует в approval path.
 
+## Intake Decisions And Flow Statuses
+
+`intake_decision` описывает runtime-решение на входе в запуск и не является
+самостоятельным GitHub Project status.
+
+Правила mapping:
+
+- `eligible`: runner продолжает текущий flow path; сам по себе eligibility не
+  переводит issue в новый project status;
+- `manual-override`: explicit `run` продолжает текущий flow только по явному
+  intent оператора; это решение логируется в diagnostics, но не мапится на
+  отдельный GitHub Project status;
+- `skipped`: используется для non-error refusal в `poll`; runner не создает
+  analysis session, не берет issue в работу и не меняет GitHub Project status;
+- `denied`: используется для deterministic refusal по security policy или config
+  contract после выбора target issue; если denial делает stage непродолжимым,
+  текущая session должна завершаться outcome `blocked`, а issue переводится в
+  `Analysis Blocked`; если denial относится только к одному risky action и
+  analysis может продолжаться, project status не меняется, а отказ остается в
+  local diagnostics и audit trail;
+- `needs-clarification` зарезервирован для нехватки human input и не должен
+  подменять собой security `denied`;
+- `plan-ready` не должен использоваться для маскировки skipped/denied paths.
+
 ## Risk Policy Matrix
 
 Для `public-safe` режима минимальная policy-матрица должна быть такой:
@@ -161,9 +221,9 @@ contract, а не как новую перепридуманную модель.
 | Категория | Allow | Approval | Deny |
 | --- | --- | --- | --- |
 | `filesystem` | чтение и запись внутри repo/worktree и разрешенного runtime-dir | разовое чтение явно указанного оператором несекретного пути вне repo/worktree | чтение `~/.ssh`, `~/.aws`, `~/.config`, `/proc/self/environ`, `.env` вне repo; любая запись вне repo/worktree/runtime-dir |
-| `network` | канонический GitHub control plane, нужный для работы `ai-teamlead` | открытие внешней ссылки или скачивание контента с operator-approved allowlisted host | доступ к non-allowlisted host; отправка локальных файлов/секретов наружу |
+| `network` | канонический GitHub control plane, нужный для работы `ai-teamlead`, включая metadata и canonical workflow endpoints текущего GitHub repo | открытие внешней ссылки или скачивание контента с operator-approved allowlisted host либо явное чтение linked artifact content, если это не требует публикации локальных данных наружу | доступ к non-allowlisted host; отправка локальных файлов/секретов наружу |
 | `execution` | inspect/build/test/edit команды, ограниченные repo/worktree и штатным toolchain | точечный запуск operator-approved команды вне baseline toolchain, если она все еще ограничена approved scope | `sudo`, системные package managers, sandbox escalation, destructive host-level commands, redirection вне repo/worktree |
-| `publication` | публикация versioned artifacts и workflow metadata в канонический GitHub path после secret-scrub | публикация явно одобренного оператором несекретного фрагмента вне обычного workflow | публикация secret data, raw credentials, локальных config dumps, сырых runtime artifacts с чувствительным содержимым, uploads во внешние сервисы |
+| `publication` | публикация versioned artifacts и workflow metadata в канонический GitHub path после secret-scrub | публикация reviewable non-secret artifact в заранее определенный canonical GitHub sink, если auto-path был остановлен explicit gate-ом | публикация secret data, raw credentials, локальных config dumps, сырых runtime artifacts с чувствительным содержимым, любые внешние publish sinks и uploads во внешние сервисы |
 
 Если действие не попало ни в одну allow/approval-категорию, оно трактуется как
 `deny` в `public-safe` режиме.
@@ -194,22 +254,59 @@ Payload classes для MVP:
 Только первые две категории могут попадать в publication allow/approval path;
 `sensitive-local-data` всегда `deny`.
 
+Границы canonical GitHub workflow для MVP:
+
+- allow boundary ограничен current issue/PR/status workflow и versioned changes
+  текущего repo/worktree;
+- linked GitHub issue/PR/artifact content может читаться только как untrusted
+  data и не образует отдельный publish sink сам по себе;
+- external URL или linked external artifact не может автоматически открываться
+  или публиковаться только потому, что он встретился в issue/comment/body.
+
+Важное ограничение MVP:
+
+- approval допустим только внутри заранее определенного canonical GitHub sink;
+- publication во внешние sinks (`paste`, `email`, `chat`, `webhook`, file
+  sharing) всегда `deny`, даже если hostile input пытается представить такой
+  путь как "обычный debug workflow".
+
 ## Approval Lifecycle And Storage
 
 MVP approval contract:
 
 - approval one-shot и action-bound;
 - approval valid только внутри текущего `session_uuid`;
+- runtime перед risky action обязан показать approval request descriptor:
+  `action_kind`, `target_fingerprint`, human-readable target, policy reason и
+  requested scope;
+- canonical operator response для grant/deny в MVP должен быть однозначным и
+  содержать тот же `action_kind` и тот же `target_fingerprint`; двусмысленный,
+  частичный или mismatched ответ не считается `granted`;
 - approval reusable только для того же `action_kind` и того же
   `target_fingerprint` в рамках текущей session;
 - новый target, новый `session_uuid`, restart/re-run или изменившийся target
   invalidates previous approval;
 - `expires_at` по умолчанию равен завершению session либо более раннему явному
-  invalidation event.
+  invalidation event;
+- timeout, отсутствие ответа, malformed operator response или ошибка
+  сопоставления descriptor -> response трактуются как `denied`, а не как
+  implicit retry/success.
+
+`target_fingerprint` должен вычисляться детерминированно:
+
+- `filesystem-read` / `filesystem-write`: normalized absolute path(s) +
+  requested operation;
+- `network-open` / `network-download`: method, host, normalized URL/path и
+  expected payload class;
+- `execution-command`: executable, argv, cwd и declared redirection targets;
+- `publication-github`: sink kind, destination identifier, payload class и
+  source artifact identifier.
 
 Source of truth и storage:
 
 - `approval_record` хранится в runtime artifacts текущей session;
+- `operator_response` сохраняется как итог нормализованного решения
+  (`approve`/`deny`) и не должен подменять собой исходный descriptor;
 - audit trail должен быть append-only или атомарно перезаписываемым так, чтобы
   частичная запись не трактовалась как granted approval;
 - если запись approval record не удалась, risky action трактуется как `denied`,
@@ -220,11 +317,16 @@ Source of truth и storage:
 - текущий `settings.yml` пока не содержит полной security schema, но issue
   фиксирует минимальный draft contract, который implementation должен
   использовать как source of truth;
-- отсутствие security-поля не должно ослаблять policy;
+- отсутствие security-поля не должно ослаблять policy; для `public` и
+  `unknown` visibility runtime обязан применять встроенный fail-closed baseline
+  (`public-safe`, `owner-only`, пустой allowlist, `agent-session`,
+  canonical GitHub only);
 - default policy для public repos должна быть безопасной даже без явной
   конфигурации;
 - если visibility не удается определить через GitHub metadata, runtime должен
   оставаться в `public-safe`;
+- для `private` visibility отсутствие security override сохраняет
+  `operating_mode = standard`;
 - минимальная repo-level security schema для MVP должна покрывать:
   - `security.public_repo.operating_mode`: `auto` | `force-public-safe`
   - `security.public_repo.intake_policy`: `owner-only` | `allowlist`
@@ -238,6 +340,13 @@ Source of truth и storage:
   approval contract для `public-safe` режима;
 - до обновления launcher defaults implementation `public-safe mode` должен
   иметь приоритет над legacy `--ask-for-approval never` path;
+- malformed enum values, conflicting legacy flags или поломанный security config
+  должны приводить к fail-closed behavior: `public-safe` не ослабляется, а
+  текущий invocation либо получает deterministic deny для risky actions, либо
+  stage-level `blocked`, если безопасное продолжение невозможно;
+- `allowlist` с пустым списком разрешен как конфигурация, но означает, что
+  `poll` всегда получает `skipped`, а explicit `run` возможен только как
+  `manual-override`;
 - проверки, затрагивающие `zellij`, допустимы только в headless path и не
   должны использовать host `zellij` пользователя.
 

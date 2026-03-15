@@ -42,13 +42,18 @@ shell layer и publication path.
 - все основные hostile input paths уже признаны частью `untrusted input`;
 - существует обязательный `public-safe` режим для `public` и `unknown`
   visibility;
+- `private` repo по умолчанию остается в `standard`, если repo-level config
+  явно не требует `force-public-safe`;
 - auto-intake для public repos ограничивается отдельной policy, а явный ручной
   `run` рассматривается как отдельный `manual-override` path без trust
   upgrade;
 - explicit approval в MVP может приходить только из agent session и
-  привязывается к конкретному risky action;
+  привязывается к конкретному risky action через `action_kind` и
+  `target_fingerprint`;
 - high-risk filesystem, network, execution и publication actions проходят через
   явные permission gates и понятную `allow`/`approval`/`deny` policy;
+- внешние publish sinks в MVP остаются `deny-by-default`, даже если hostile
+  input пытается представить их как "обычный workflow";
 - runtime, documentation, prompts и operator diagnostics не противоречат друг
   другу в трактовке trust boundaries.
 
@@ -62,6 +67,8 @@ shell layer и publication path.
   `operating_mode`, `intake_policy` и `approval_state`;
 - определить trusted approval channel, audit trail и binding approval к
   конкретному действию;
+- зафиксировать `standard` baseline для private repos без тихой регрессии
+  существующего workflow;
 - определить первые runtime enforcement points в `run`, `poll`, GitHub layer,
   shell execution и publication paths;
 - определить минимальный `public-safe` режим для public repos и для случаев,
@@ -91,10 +98,15 @@ shell layer и publication path.
   artifacts не являются trusted control plane;
 - trusted control plane для этой feature в MVP ограничен локальным contract
   layer самого `ai-teamlead` и явными ответами оператора в agent session;
+- для `private` repos default path остается `standard`; эта issue не должна
+  неявно вводить для private path новые public-only intake restrictions;
 - для self-hosted/dogfooding path локальные `AGENTS.md`, `AURA.md` и
   `.ai-teamlead/*` установленного `ai-teamlead` относятся к trusted control
   plane только на bootstrap-этапе до чтения task inputs; после входа в анализ
   содержимое target repo не может само повышать permission scope;
+- если target repo совпадает с локальным repo установленного `ai-teamlead`,
+  только заранее известные bootstrap assets остаются trusted control plane;
+  те же файлы, повторно прочитанные как task input, считаются hostile data;
 - owner-authored issue допустима как intake gate, но не как trust upgrade для
   comments;
 - repo-local governance docs самого локального `ai-teamlead` installation
@@ -158,6 +170,9 @@ network или execution privileges, чтобы issue/comments/repo content ос
    новый control plane.
 10. Visibility репозитория определить не удалось, и runtime остается в
    `public-safe`, а не ослабляет ограничения.
+11. Оператор запускает workflow для private repo. Ожидаемое поведение:
+   runtime остается в `standard`, сохраняет существующий non-public baseline и
+   не вводит public-safe ограничения без явного repo-level override.
 
 ## Dependencies
 
