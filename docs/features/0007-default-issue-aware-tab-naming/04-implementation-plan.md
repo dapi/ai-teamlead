@@ -199,8 +199,6 @@ Summary-документы и шаблоны, которые нужно синх
 
 ## Открытые вопросы и риски
 
-- нужно ли materialize-ить новый default в config struct или достаточно runtime
-  resolver;
 - не потребует ли изменение отдельного migration note для уже созданных repo
   templates;
 - не всплывут ли тесты, завязанные на старую literal строку `issue-analysis`
@@ -211,3 +209,5 @@ Summary-документы и шаблоны, которые нужно синх
 ### 2026-03-15
 
 - создан отдельный план реализации для Feature 0007
+- выбран путь через canonical defaulted-by-application поле
+  `zellij.tab_name_template`

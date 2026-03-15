@@ -34,7 +34,8 @@ Feature расширяет существующий launcher contract из Featu
   - effective tab name = `zellij.tab_name`
 - `tab`
   - если `zellij.tab_name_template` явно задан, используется он;
-  - если поле не задано, effective value считается `#${ISSUE_NUMBER}`;
+  - если поле не задано в active YAML, application default равен
+    `#${ISSUE_NUMBER}`;
   - fallback на stable `zellij.tab_name` больше не является default path.
 
 ## Интерфейсы
@@ -54,9 +55,8 @@ Feature расширяет существующий launcher contract из Featu
 
 Предпочтительное направление:
 
-- оставить `tab_name_template` optional полем конфигурации;
-- application default для `tab`-ветки задавать в resolver, а не принудительно
-  материализовать в active YAML;
+- оставить `tab_name_template` optional в active YAML, но перевести его в
+  canonical defaulted-by-application поле;
 - explicit literal override вроде `issue-analysis` считать валидным opt-out;
 - runtime manifests хранить только resolved имя вкладки.
 
@@ -74,15 +74,14 @@ Feature расширяет существующий launcher contract из Featu
 zellij:
   tab_name: "issue-analysis"
   launch_target: "tab"
-  # optional explicit override:
-  # tab_name_template: "issue-analysis"
+  tab_name_template: "#${ISSUE_NUMBER}"
 ```
 
 Семантика:
 
 - `tab_name` больше не описывает default tab title для issue-specific tab path;
-- `tab_name_template` становится источником naming policy для `tab`-ветки:
-  explicit override или implicit default;
+- `tab_name_template` становится canonical naming policy для `tab`-ветки:
+  defaulted-by-application поле с возможностью explicit override;
 - placeholder set остается прежним: только `${ISSUE_NUMBER}`.
 
 ## Ограничения реализации

@@ -49,10 +49,6 @@
 
 ## Открытые вопросы
 
-- где лучше зафиксировать opt-out path: как defaulted значение поля
-  `tab_name_template` или как runtime default внутри resolver;
-- нужно ли оставлять в template явный commented example `tab_name_template`,
-  если новое поведение станет application default;
 - нужен ли отдельный CLI-visible diagnostics hint, объясняющий distinction
   между `pane` и `tab` naming semantics.
 
@@ -61,3 +57,5 @@
 ### 2026-03-15
 
 - создана feature 0007 для смены default tab naming в `tab`-режиме
+- выбран путь через canonical application default-layer в `Config`, а не через
+  ad-hoc runtime-only fallback
