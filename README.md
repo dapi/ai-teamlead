@@ -250,7 +250,7 @@ defaulted-поля отражены в закомментированном ви
 # zellij:
 #   session_name: "${REPO}"
 #   tab_name: "issue-analysis"
-#   layout: "compact"
+#   layout: "compact"  # opt-in example, not runtime default
 #
 # launch_agent:
 #   analysis_branch_template: "analysis/issue-${ISSUE_NUMBER}"
@@ -292,13 +292,18 @@ Defaulted-by-application поля MVP:
 - `runtime.poll_interval_seconds`
 - `zellij.session_name`
 - `zellij.tab_name`
-- `zellij.layout`
 - `launch_agent.analysis_branch_template`
 - `launch_agent.worktree_root_template`
 - `launch_agent.analysis_artifacts_dir_template`
 - `launch_agent.implementation_branch_template`
 - `launch_agent.implementation_worktree_root_template`
 - `launch_agent.implementation_artifacts_dir_template`
+
+Явно допустимое `example-only extension` поле:
+
+- `zellij.layout`
+  В bootstrap template остается как закомментированный opt-in пример. При
+  отсутствии active override runtime поведение не меняется.
 
 Дополнительно имеет смысл зарезервировать место для:
 

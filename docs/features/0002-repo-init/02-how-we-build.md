@@ -100,8 +100,8 @@
   documented defaults, а не как обязательный активный YAML;
 - `zellij.session_name` документируется как template `${REPO}`;
 - `zellij.tab_name` документируется со значением `issue-analysis`;
-- `zellij.layout` документируется со значением `compact`, чтобы freshly
-  initialized repo сохранял текущий bootstrap UX и без раскомментирования файла;
+- `zellij.layout` документируется со значением `compact` как opt-in пример, а
+  не как runtime default;
 - `./.ai-teamlead/zellij/analysis-tab.kdl` bootstrap-ится как versioned template
   для analysis tab с placeholders `${TAB_NAME}` и `${PANE_ENTRYPOINT}` и
   встроенным `compact-bar` как bootstrap default для tab-level UX
@@ -116,6 +116,9 @@ Runtime loading при этом строится как `defaults + active YAML 
 
 - `github.project_id` остается `required-without-default`;
 - отсутствующие defaulted-поля подставляются из canonical Rust default-layer;
+- `zellij.layout` остается допустимым `example-only extension`: шаблон
+  показывает, как включить custom layout, но отсутствие active override не
+  меняет launcher path;
 - comment-only `settings.yml` допустим как bootstrap состояние, но `poll`/`run`
   все равно требуют, чтобы оператор задал `github.project_id`.
 

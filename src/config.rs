@@ -368,7 +368,7 @@ fn default_zellij_tab_name() -> String {
 }
 
 fn default_zellij_layout() -> Option<String> {
-    Some("compact".into())
+    None
 }
 
 fn default_analysis_branch_template() -> String {
@@ -517,8 +517,8 @@ mod tests {
         },
         FieldContract {
             key: "zellij.layout",
-            kind: FieldKind::DefaultedByApplication,
-            runtime_default: Some("compact"),
+            kind: FieldKind::ExampleOnlyExtension,
+            runtime_default: None,
             template_line: "#   layout: \"compact\"",
         },
         FieldContract {
@@ -712,7 +712,7 @@ launch_agent:
             config.launch_agent.implementation_branch_template,
             "implementation/issue-${ISSUE_NUMBER}"
         );
-        assert_eq!(config.zellij.layout.as_deref(), Some("compact"));
+        assert_eq!(config.zellij.layout, None);
     }
 
     #[test]
@@ -727,7 +727,7 @@ github:
         assert_eq!(config.runtime.poll_interval_seconds, 3600);
         assert_eq!(config.zellij.session_name, "${REPO}");
         assert_eq!(config.zellij.tab_name, "issue-analysis");
-        assert_eq!(config.zellij.layout.as_deref(), Some("compact"));
+        assert_eq!(config.zellij.layout, None);
         assert_eq!(
             config.launch_agent.analysis_branch_template,
             "analysis/issue-${ISSUE_NUMBER}"
@@ -763,7 +763,7 @@ zellij:
         assert_eq!(config.runtime.poll_interval_seconds, 60);
         assert_eq!(config.zellij.session_name, "custom-session");
         assert_eq!(config.zellij.tab_name, "issue-analysis");
-        assert_eq!(config.zellij.layout.as_deref(), Some("compact"));
+        assert_eq!(config.zellij.layout, None);
     }
 
     #[test]
@@ -779,16 +779,25 @@ zellij:
         let config = runtime_defaults_with_project("PVT_placeholder");
         let value = serde_yaml::to_value(config).expect("config should serialize");
         let actual_keys: BTreeSet<_> = flatten_yaml_scalars(&value).into_keys().collect();
-        let classified_keys: BTreeSet<_> = FIELD_CONTRACTS
+        let runtime_backed_keys: BTreeSet<_> = FIELD_CONTRACTS
             .iter()
+            .filter(|field| field.kind != FieldKind::ExampleOnlyExtension)
             .map(|field| field.key.to_string())
             .collect();
-        assert_eq!(classified_keys, actual_keys);
+        assert_eq!(runtime_backed_keys, actual_keys);
+
+        let example_only_keys: BTreeSet<_> = FIELD_CONTRACTS
+            .iter()
+            .filter(|field| field.kind == FieldKind::ExampleOnlyExtension)
+            .map(|field| field.key.to_string())
+            .collect();
         assert!(
-            FIELD_CONTRACTS
-                .iter()
-                .all(|field| field.kind != FieldKind::ExampleOnlyExtension),
-            "current contract must not silently rely on example-only exceptions"
+            !example_only_keys.is_empty(),
+            "contract must explicitly model allowed example-only exceptions",
+        );
+        assert!(
+            actual_keys.is_disjoint(&example_only_keys),
+            "example-only extensions must stay outside runtime defaults until explicitly enabled"
         );
     }
 

@@ -107,6 +107,9 @@ bootstrap `settings.yml` допускается как comment-only template с
 - `tab_name` это стабильный project-local идентификатор для orchestration
 - analysis/implementation statuses, `runtime.*`, `zellij.*` и
   `launch_agent.*` относятся к `defaulted-by-application`
+- `zellij.layout` остается `example-only extension`: template показывает
+  возможный opt-in custom layout, но отсутствие active override не меняет
+  runtime-path
 - runtime `session_id`, `tab_id`, `pane_id` не задаются в конфиге
 - `ai-teamlead` во время запуска должен выбрать effective target session,
   запретить shared multi-repo existing session и затем либо найти существующие

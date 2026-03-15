@@ -17,7 +17,8 @@
 - `init` создает `./.codex/README.md`
 - `init` создает comment-only `settings.yml`, который документирует required и
   defaulted поля без материализации runtime defaults в активный YAML
-- `init` документирует `zellij.layout` со значением `compact`
+- `init` документирует `zellij.layout` со значением `compact` как opt-in
+  example-only поле
 - `init` bootstrap-ит `analysis-tab.kdl` с `compact-bar` и обязательными
   placeholders `${TAB_NAME}` и `${PANE_ENTRYPOINT}`
 - если `./init.sh` отсутствует, `init` создает симлинк на

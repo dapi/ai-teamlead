@@ -38,9 +38,11 @@ bootstrap-template перестает быть fully materialized runtime YAML.
 5. `required-without-default` поля не получают скрытый fallback. Для текущего
    контракта таким полем остается `github.project_id`.
 6. Закомментированный пример в template может отличаться от runtime default
-   только для явно помеченных `example-only extension`. Текущий MVP-контракт не
-   использует таких исключений.
-7. Эволюция схемы защищается guardrail-тестом, который проверяет:
+   только для явно помеченных `example-only extension`.
+7. В текущем MVP-контракте таким исключением является `zellij.layout`: template
+   показывает opt-in пример `compact`, но отсутствие active override не меняет
+   launcher behavior.
+8. Эволюция схемы защищается guardrail-тестом, который проверяет:
    - что все config keys классифицированы;
    - что runtime defaults совпадают с documented defaults в template;
    - что required fields не теряют явную диагностику.
