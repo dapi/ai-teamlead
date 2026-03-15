@@ -3,7 +3,7 @@
 Статус: draft, evolving
 Владелец: владелец репозитория
 Роль: SSOT для flow реализации issue
-Последнее обновление: 2026-03-14
+Последнее обновление: 2026-03-15
 
 ## Назначение
 
@@ -86,8 +86,10 @@ Runtime state не должен подменять project status и не дол
 
 Дополнительное правило:
 
-- `tracked_pr_*` и `last_known_flow_status` не считаются каноническим источником
-  истины и могут использоваться только как cache/diagnostic metadata.
+- поля runtime вида `tracked_pr_*`, `tracked_pr_url` и
+  `last_known_flow_status` не входят в канонический semantic contract;
+- если такие поля временно существуют, они допускаются только как
+  cache/diagnostic metadata.
 
 ## Связь с `run`
 
@@ -135,8 +137,8 @@ Implementation flow может стартовать только если approv
 4. `Waiting for Code Review`
    Значение: обязательные quality gates пройдены, issue готова к human review.
 5. `Done`
-   Значение: tracked implementation PR merged, issue закрыта, бизнес-lifecycle
-   implementation stage завершен.
+   Значение: канонический implementation PR merged, issue закрыта,
+   бизнес-lifecycle implementation stage завершен.
 6. `Implementation Blocked`
    Значение: реализация не может продолжаться без внешнего вмешательства.
 
@@ -159,7 +161,8 @@ Implementation flow может стартовать только если approv
   без coding stage;
 - прямой переход из `Implementation In Progress` в `Waiting for Code Review`
   без PR/CI contract;
-- прямой переход из `Implementation In Progress` в `Done` без merge tracked PR.
+- прямой переход из `Implementation In Progress` в `Done` без merge
+  канонического implementation PR.
 
 ## Условия входа
 
@@ -204,8 +207,9 @@ Issue может быть запущена через implementation flow тол
 `Implementation Blocked`:
 
 - повторный `run` допускается только как явное operator-intent действие;
-- `run` сначала делает reconcile по GitHub Project status, implementation PR,
-  branch refs и worktree, а уже потом выбирает дальнейшее действие;
+- `run` сначала делает reconcile по GitHub Project status, каноническому
+  implementation PR, branch refs и worktree, а уже потом выбирает дальнейшее
+  действие;
 - issue с merged implementation PR при статусе `Waiting for Code Review`
   терминализируется в `Done` без нового coding launch;
 - в остальных случаях issue переводится обратно в `Implementation In Progress`;
@@ -357,7 +361,7 @@ launch_agent:
 - зафиксирован единый `run <issue>` как stage-aware entrypoint
 - добавлена status model для implementation lifecycle
 - добавлен stage-aware finalization contract для implementation outcomes
-- добавлен terminal post-merge path с `Done`, tracked PR metadata и cleanup
+- добавлен terminal post-merge path с `Done` и cleanup
 
 ### 2026-03-15
 
@@ -365,4 +369,4 @@ launch_agent:
 - `tracked PR metadata` и `last_known_flow_status` переведены в роль
   cache/diagnostic metadata, а не semantic source of truth
 - добавлен [ADR-0028](./adr/0028-github-first-reconcile-and-runtime-cache-only.md)
-  как proposed replacement для соответствующих частей ADR-0025/0026/0027
+  как accepted replacement для соответствующих частей ADR-0025/0026/0027

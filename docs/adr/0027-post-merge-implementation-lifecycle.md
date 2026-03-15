@@ -1,6 +1,6 @@
 # ADR-0027: post-merge lifecycle остается частью `issue-implementation-flow`
 
-Статус: на пересмотре, см. ADR-0028
+Статус: accepted, частично superseded by ADR-0028
 Дата: 2026-03-14
 
 ## Контекст
@@ -23,8 +23,8 @@
 
 Принятые правила:
 
-- terminal project status после merge tracked implementation PR называется
-  `Done`;
+- terminal project status после merge канонического implementation PR
+  называется `Done`;
 - `run <issue>` при статусе `Waiting for Code Review` может выполнить
   post-merge reconciliation без нового coding launch, если implementation PR
   уже merged;
@@ -35,12 +35,21 @@
 - cleanup warning не откатывает terminal business result и не возвращает issue
   в активный статус.
 
+После принятия [ADR-0028](./0028-github-first-reconcile-and-runtime-cache-only.md)
+это решение сохраняется, но с уточнением механизма:
+
+- post-merge lifecycle остается частью `issue-implementation-flow`;
+- terminal status `Done`, close issue и cleanup остаются принятыми;
+- каноническая implementation PR identity должна восстанавливаться из GitHub
+  через branch contract, а не из обязательного runtime-поля `tracked_pr_*`.
+
 ## Последствия
 
 Плюсы:
 
 - implementation lifecycle получает детерминированное завершение;
-- merge tracked PR больше не оставляет issue и project status в подвешенном
+- merge канонического implementation PR больше не оставляет issue и project
+  status в подвешенном
   состоянии;
 - post-merge reconciliation не требует отдельного operator-facing flow для MVP.
 
@@ -82,6 +91,7 @@
 
 ### 2026-03-15
 
-- статус ADR переведен в `на пересмотре`
-- механизм `tracked PR metadata in runtime` вынесен на повторный пересмотр в
-  [ADR-0028](./0028-github-first-reconcile-and-runtime-cache-only.md)
+- ADR сохранен в статусе `accepted` для terminal post-merge lifecycle
+- [ADR-0028](./0028-github-first-reconcile-and-runtime-cache-only.md)
+  частично supersede-ит только механизм `tracked PR metadata in runtime`
+  как обязательный identity contract

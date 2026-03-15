@@ -4,7 +4,7 @@
 Тип задачи: `feature`
 Тип проекта: `infra/platform`
 Размер: `medium`
-Последнее обновление: 2026-03-14
+Последнее обновление: 2026-03-15
 Статус согласования: approved
 Approved By: dapi
 Approved At: 2026-03-14T23:05:41+03:00
@@ -87,7 +87,7 @@ lifecycle без ввода лишнего третьего flow для MVP.
 
 - post-merge lifecycle остается частью `issue-implementation-flow`, а не
   выделяется в отдельный третий flow для MVP;
-- merge tracked implementation PR становится явным trigger для terminal
+- merge канонического implementation PR становится явным trigger для terminal
   finalization;
 - после успешной post-merge finalization issue закрывается, а GitHub Project
   status переводится в `Done`;
@@ -98,26 +98,23 @@ lifecycle без ввода лишнего третьего flow для MVP.
 
 Блокирующих вопросов по текущему issue не выявлено.
 
-## Follow-up review 2026-03-15
+## Follow-up acceptance 2026-03-15
 
-В implementation review выяснилось, что часть принятого решения требует
-повторного архитектурного пересмотра.
+В implementation review был отдельно пересмотрен механизм восстановления истины
+о состоянии issue.
 
-Под пересмотр вынесен не terminal status `Done` и не сам post-merge lifecycle,
-а способ восстановления истины о состоянии issue:
+По итогам принят
+[ADR-0028](../../../docs/adr/0028-github-first-reconcile-and-runtime-cache-only.md).
 
-- хранение `tracked PR metadata` в runtime;
-- хранение `last_known_flow_status` как semantic state;
-- зависимость post-merge reconcile от локального runtime как обязательного
-  источника данных.
+Зафиксированное решение:
 
-На review вынесен proposed ADR:
+- terminal status `Done` и сам post-merge lifecycle сохраняются;
+- source of truth по lifecycle остается в GitHub Project;
+- implementation PR должна определяться по canonical branch contract;
+- runtime переводится в роль cache/execution metadata;
+- `tracked PR metadata` и `last_known_flow_status` не считаются обязательной
+  semantic частью runtime contract.
 
-- [../../../docs/adr/0028-github-first-reconcile-and-runtime-cache-only.md](../../../docs/adr/0028-github-first-reconcile-and-runtime-cache-only.md)
-
-Цель follow-up review:
-
-- подтвердить, что source of truth остается на GitHub;
-- перевести runtime в роль cache/execution metadata;
-- определить, нужно ли supersede-ить соответствующие части ADR-0025/0026/0027
-  до следующего кодового шага.
+Это означает, что approved analysis package остается исторически валидным по
+целям и post-merge semantics, но его части про runtime-tracked PR identity и
+semantic runtime state частично superseded принятым ADR-0028.

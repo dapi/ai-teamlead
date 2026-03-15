@@ -1,7 +1,7 @@
 # Feature 0001: Runtime-артефакты
 
-Статус: draft, частично на пересмотре через ADR-0028
-Последнее обновление: 2026-03-14
+Статус: draft
+Последнее обновление: 2026-03-15
 
 ## Назначение
 
@@ -86,8 +86,9 @@
 Важно не смешивать разные словари состояний:
 
 - `session.json.status` это локальный lifecycle session-binding
-- `issues/<issue_number>.json.last_known_flow_status` это локальный cache /
-  diagnostic snapshot последнего наблюдаемого flow-статуса из GitHub Project
+- `issues/<issue_number>.json.last_known_flow_status` при наличии это только
+  локальный cache / diagnostic snapshot последнего наблюдаемого flow-статуса
+  из GitHub Project
 - source of truth по status issue остается в GitHub Project, а не в runtime json
 
 ### `sessions/<session_uuid>/launch-layout.kdl`
@@ -123,17 +124,18 @@
 {
   "issue_number": 123,
   "session_uuid": "uuid",
-  "last_known_flow_status": "Waiting for Clarification",
   "updated_at": "2026-03-13T12:15:00Z"
 }
 ```
 
 Примечание:
 
-- `last_known_flow_status` не должен использоваться как обязательная semantic
-  истина для reconcile;
-- эта часть runtime contract вынесена на пересмотр в
-  [ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md).
+- `last_known_flow_status` при необходимости может существовать как optional
+  cache/diagnostic поле;
+- после принятия
+  [ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md)
+  оно не входит в обязательный runtime contract и не используется как semantic
+  истина для reconcile.
 
 ## Инварианты
 
@@ -230,19 +232,17 @@
 
 ### Практическая цепочка запуска
 
-## Follow-up review 2026-03-15
+## Follow-up acceptance 2026-03-15
 
-Под пересмотр вынесены две части runtime contract:
+Принятый
+[ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md)
+зафиксировал для runtime два ограничения:
 
-- `last_known_flow_status` как semantic field;
-- обязательность runtime metadata для post-merge reconcile.
-
-Proposed направление:
-
-- runtime остается durable storage для session-binding;
-- reconcile восстанавливает semantic state из GitHub Project, PR и git refs;
-- runtime fields, дублирующие GitHub state, остаются только cache/diagnostic
-  слоем.
+- runtime хранит session-binding, launcher и cache/execution metadata, но не
+  semantic state issue;
+- `tracked PR metadata` и `last_known_flow_status` не являются обязательной
+  частью runtime contract и не могут использоваться как канонический источник
+  истины.
 
 Для одной issue цепочка выглядит так:
 

@@ -1,6 +1,6 @@
 # ADR-0026: stage-aware `internal complete-stage`
 
-Статус: на пересмотре, см. ADR-0028
+Статус: accepted, частично superseded by ADR-0028
 Дата: 2026-03-14
 
 ## Контекст
@@ -37,6 +37,15 @@ ai-teamlead internal complete-stage <session_uuid> --stage <stage> --outcome <ou
 - `--stage implementation` включает implementation-specific outcome handling;
 - prompt не выполняет `git commit`, `git push`, `gh pr create`,
   `gh pr ready`, `gh pr checks` самостоятельно.
+
+После принятия [ADR-0028](./0028-github-first-reconcile-and-runtime-cache-only.md)
+граница решения уточнена:
+
+- `complete-stage` остается каноническим stage-aware finalization contract;
+- но он не должен полагаться на runtime как на обязательный semantic source of
+  truth;
+- implementation-specific reconcile перед terminal decisions должен
+  использовать GitHub-first observed state.
 
 Implementation outcomes:
 
@@ -94,7 +103,7 @@ Implementation outcomes:
 
 ### 2026-03-15
 
-- статус ADR переведен в `на пересмотре`
-- уточняется граница ответственности между `complete-stage` и GitHub-first
-  reconcile, описанная в
-  [ADR-0028](./0028-github-first-reconcile-and-runtime-cache-only.md)
+- ADR сохранен в статусе `accepted` для stage-aware finalization contract
+- [ADR-0028](./0028-github-first-reconcile-and-runtime-cache-only.md)
+  частично supersede-ит только ту часть решения, где implementation reconcile
+  мог зависеть от runtime как от источника истины

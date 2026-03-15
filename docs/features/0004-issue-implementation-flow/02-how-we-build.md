@@ -40,7 +40,7 @@
 - `analysis` binding;
 - `implementation` binding;
 - branch/worktree и launcher context для каждого stage;
-- tracked implementation PR metadata для post-merge reconciliation.
+- optional cache/diagnostic metadata без semantic роли source of truth.
 
 ## Интерфейсы
 
@@ -60,19 +60,14 @@
 - approval metadata reader для analysis artifacts;
 - GitHub PR reader для merge detection и issue close.
 
-## Follow-up review 2026-03-15
+## Follow-up acceptance 2026-03-15
 
-После первой implementation-итерации под повторный review вынесен один
-архитектурный аспект:
-
-- можно ли считать `tracked PR metadata` и `last_known_flow_status` частью
-  обязательного runtime contract.
-
-Текущее proposed направление зафиксировано в
-[ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md):
+Принятый
+[ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md)
+зафиксировал:
 
 - source of truth по lifecycle остается в GitHub Project;
-- implementation PR должен определяться по canonical branch contract;
+- implementation PR определяется по canonical branch contract;
 - runtime хранит execution/cache metadata, но не semantic state issue.
 
 ## Технические решения
@@ -86,8 +81,7 @@
 - runtime binding обобщается до stage-aware модели;
 - `internal complete-stage` расширяется до stage-aware finalization с
   implementation outcomes;
-- post-merge path требует явного branch contract и сейчас находится на
-  повторном review в части отказа от `tracked PR metadata`;
+- post-merge path требует явного branch contract и GitHub-first reconcile;
 - issue может одновременно иметь history analysis stage и активный
   implementation binding без конфликта.
 
@@ -120,5 +114,5 @@ launch_agent:
   через скрытый stage-agnostic god-script;
 - migration существующих runtime-файлов должна быть совместима с уже созданными
   analysis session artifacts;
-- до принятия ADR-0028 feature считается на review в части GitHub-first
-  reconcile.
+- локальный runtime может отсутствовать или быть неполным без потери
+  восстановимости implementation state.

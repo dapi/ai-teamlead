@@ -86,15 +86,13 @@ Feature считается готовой, если:
 - какие checks считаются обязательными для перехода к code review;
 - почему merged reconciliation завершилась в `Done` или не сработала.
 
-## Follow-up review 2026-03-15
+## Follow-up acceptance 2026-03-15
 
-Этот verification contract находится на частичном пересмотре в части
-GitHub-first reconcile.
-
-До принятия
+Принятый
 [ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md)
-нужно отдельно подтвердить:
+добавляет к verification contract три обязательных проверки:
 
-- что отсутствие `tracked PR metadata` не ломает deterministic reconcile;
-- что `last_known_flow_status` остается только cache/diagnostic полем;
-- что canonical branch contract достаточен для однозначного выбора PR.
+- отсутствие `tracked PR metadata` не ломает deterministic reconcile;
+- `last_known_flow_status` остается только cache/diagnostic полем;
+- canonical branch contract достаточен для однозначного выбора PR или дает
+  явную диагностику неоднозначности.

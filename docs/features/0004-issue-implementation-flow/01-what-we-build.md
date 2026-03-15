@@ -67,12 +67,12 @@
 - проверки, которые могут задеть host `zellij`, выполняются только в
   headless-friendly среде.
 
-## Follow-up review 2026-03-15
+## Follow-up acceptance 2026-03-15
 
-В рамках follow-up review на proposed
+Принятый
 [ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md)
-отдельно пересматривается вопрос:
+зафиксировал, что:
 
-- нужен ли implementation flow обязательный runtime-tracked PR identity, или
-  reconcile должен полностью восстанавливаться из GitHub Project, PR и git
-  refs.
+- implementation flow не требует обязательного runtime-tracked PR identity;
+- reconcile должен восстанавливаться из GitHub Project, канонического PR по
+  branch contract и наблюдаемого git state.

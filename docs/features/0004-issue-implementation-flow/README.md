@@ -2,7 +2,7 @@
 
 Статус: draft
 Владелец: владелец репозитория
-Последнее обновление: 2026-03-14
+Последнее обновление: 2026-03-15
 
 ## Контекст
 
@@ -53,8 +53,6 @@
   finalization command или оставаться явным human gate;
 - потребуется ли в будущем отдельный post-merge flow для deploy/release path
   поверх базового terminal status `Done`.
-- должен ли implementation reconcile полностью отказаться от `tracked PR
-  metadata` и `last_known_flow_status` в пользу GitHub-first модели.
 
 ## Журнал изменений
 
@@ -64,6 +62,6 @@
 
 ### 2026-03-15
 
-- добавлен review-track на proposed
+- принят
   [ADR-0028](../../adr/0028-github-first-reconcile-and-runtime-cache-only.md)
-  без изменения кода
+  и зафиксирован GitHub-first reconcile для implementation flow

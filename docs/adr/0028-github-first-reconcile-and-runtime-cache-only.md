@@ -1,6 +1,6 @@
 # ADR-0028: GitHub-first reconcile и runtime только как cache/execution metadata
 
-Статус: proposed
+Статус: accepted
 Дата: 2026-03-15
 Связанный issue: #51
 
@@ -98,6 +98,16 @@ Implementation PR определяется не по сохраненному `p
 - неоднозначные PR/branch ситуации придется явно диагностировать;
 - потребуется миграция docs, runtime schema и tests.
 
+Этот ADR частично supersede-ит:
+
+- [ADR-0025](./0025-stage-aware-runtime-bindings.md) в части попытки хранить
+  semantic state issue в runtime;
+- [ADR-0026](./0026-stage-aware-complete-stage.md) в части, где
+  implementation reconciliation могло зависеть от runtime как от обязательного
+  источника истины;
+- [ADR-0027](./0027-post-merge-implementation-lifecycle.md) в части механизма
+  `tracked_pr_*` как обязательного post-merge identity contract.
+
 ## Альтернативы
 
 ### 1. Оставить tracked PR metadata как обязательную часть runtime
@@ -127,7 +137,8 @@ implementation lifecycle.
 
 ### 2026-03-15
 
-- предложен GitHub-first reconcile для implementation flow;
-- предложено перевести runtime в роль cache/execution metadata;
-- предложен отказ от `tracked_pr_*` и `last_known_flow_status` как semantic
-  source of truth
+- принят GitHub-first reconcile для implementation flow;
+- runtime зафиксирован в роли cache/execution metadata;
+- принят отказ от `tracked_pr_*` и `last_known_flow_status` как semantic source
+  of truth;
+- соответствующие части ADR-0025/0026/0027 частично superseded этим ADR
